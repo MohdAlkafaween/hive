@@ -1,0 +1,136 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider        = "prisma-client-js"
+  output          = "../src/generated/prisma"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id          Int              @id @default(autoincrement())
+  email       String           @unique
+  password    String
+  name        String           @default("")
+  phone       String           @default("")
+  role        String           @default("REGISTERATION_COUNTER") // Roles: ADMIN, MANAGER, BARISTA, REGISTERATION_COUNTER
+  permissions String           @default("[]") // JSON array of allowed pages for MANAGER role e.g. ["/","/directory","/stats"]
+  isActive    Boolean          @default(true) // soft-disable accounts without deleting
+  createdById Int?             // which admin created this account
+  createdBy   User?            @relation("CreatedByAdmin", fields: [createdById], references: [id], onDelete: SetNull)
+  createdUsers User[]          @relation("CreatedByAdmin")
+  createdAt   DateTime         @default(now())
+  auditLogs   StaffAuditLog[]
+}
+
+model StaffAuditLog {
+  id        Int      @id @default(autoincrement())
+  userId    Int?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  email     String   // denormalized — readable even after user is deleted
+  role      String   // role at time of event
+  event     String   // LOGIN, LOGOUT, PASSWORD_RESET, PASSWORD_RESET_BY_ADMIN
+  ip        String   @default("unknown")
+  details   String?  // extra context (e.g., "Reset by admin@hive.study")
+  createdAt DateTime @default(now())
+}
+
+model Student {
+  id               Int            @id @default(autoincrement())
+  fullName         String
+  phone            String         @unique
+  major            String?
+  rfidUuid         String?        @unique
+  createdAt        DateTime       @default(now())
+  lifetimeCheckIns Int            @default(0)
+  subscriptions    Subscription[]
+  logs             Log[]
+  transactions     Transaction[]
+  promoUsages      PromoUsage[]
+}
+
+model Subscription {
+  id                 Int      @id @default(autoincrement())
+  studentId          Int?
+  student            Student? @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  studentName        String   @default("") // denormalized — readable after student deletion
+  planType           String
+  startDate          DateTime @default(now())
+  expiryDate         DateTime
+  totalVisitsAllowed Int
+  visitsUsed         Int      @default(0)
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+}
+
+model Log {
+  id           Int       @id @default(autoincrement())
+  studentId    Int?
+  student      Student?  @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  studentName  String    @default("") // denormalized — readable after student deletion
+  checkInTime  DateTime  @default(now())
+  checkOutTime DateTime?
+  date         String
+}
+
+model Transaction {
+  id             Int      @id @default(autoincrement())
+  studentId      Int?
+  student        Student? @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  studentName    String   @default("") // denormalized — readable after student deletion
+  amountPaid     Float
+  planType       String
+  gateway        String
+  discountAmount Float    @default(0)
+  createdAt      DateTime @default(now())
+}
+
+model MenuItem {
+  id           Int            @id @default(autoincrement())
+  name         String
+  price        Float
+  imageUrl     String?
+  isOutOfStock Boolean        @default(false)
+  createdAt    DateTime       @default(now())
+  orders       BaristaOrder[]
+}
+
+model BaristaOrder {
+  id          Int       @id @default(autoincrement())
+  menuItemId  Int
+  menuItem    MenuItem  @relation(fields: [menuItemId], references: [id])
+  quantity    Int       @default(1)
+  totalPrice  Float
+  createdAt   DateTime  @default(now())
+}
+
+model PromoCode {
+  id              Int          @id @default(autoincrement())
+  code            String       @unique
+  discountType    String       @default("AMOUNT") // AMOUNT, PERCENTAGE, or BONUS_ENTRIES
+  discountAmount  Float        // Fixed JD, percentage value, or 0 for BONUS_ENTRIES
+  bonusEntries    Int          @default(0) // number of bonus visits to add (for BONUS_ENTRIES type)
+  isActive        Boolean      @default(true)
+  maxUses         Int          @default(0) // 0 = unlimited
+  timesUsed       Int          @default(0)
+  expiresAt       DateTime?
+  createdAt       DateTime     @default(now())
+  usages          PromoUsage[]
+}
+
+model PromoUsage {
+  id          Int       @id @default(autoincrement())
+  promoCodeId Int
+  promoCode   PromoCode @relation(fields: [promoCodeId], references: [id])
+  studentId   Int?
+  student     Student?  @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  studentName String    @default("") // denormalized — readable after student deletion
+  discount    Float     // actual discount applied
+  createdAt   DateTime  @default(now())
+}

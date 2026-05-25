@@ -39,3 +39,15 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+/src/generated/prisma
+
+# Database file — never commit
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+
+# User uploads & pentest output
+/public/uploads/
+/pentest-results/
