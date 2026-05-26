@@ -3,6 +3,7 @@ import prisma from '@/lib/prisma'
 import { isSubscriptionActive, todayString } from '@/lib/subscriptionLogic'
 import { isValidId, sanitizeRfid } from '@/lib/sanitize'
 import { checkRateLimit, getClientIp } from '@/lib/rateLimit'
+import { getCapacityInfo } from '@/lib/capacity'
 
 // Check-in is public (kiosk mode) but rate-limited
 export async function POST(req: NextRequest) {
@@ -45,6 +46,10 @@ export async function POST(req: NextRequest) {
       return Response.json({ status: 'EXPIRED', reason: 'No active subscription found.', student })
     }
 
+    if (sub.isFrozen) {
+      return Response.json({ status: 'EXPIRED', reason: 'Subscription is frozen.', student })
+    }
+
     const check = isSubscriptionActive(sub)
     if (!check.active) {
       await prisma.subscription.update({ where: { id: sub.id }, data: { isActive: false } })
@@ -71,6 +76,18 @@ export async function POST(req: NextRequest) {
         remainingVisits,
         logId: existingLogToday.id,
         alreadyCheckedInToday: true,
+      })
+    }
+
+    // Check capacity limit
+    const capacity = await getCapacityInfo()
+    if (capacity.isFull) {
+      return Response.json({
+        status: 'FULL',
+        reason: `Venue is at full capacity (${capacity.maxCapacity}). Please try again later.`,
+        student,
+        currentOccupancy: capacity.currentOccupancy,
+        maxCapacity: capacity.maxCapacity,
       })
     }
 

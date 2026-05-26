@@ -5,6 +5,8 @@ import { UserPlus, LogIn, X, Calendar, Clock, CreditCard, CheckCircle2, AlertTri
 import { SearchBar } from '@/components/dashboard/SearchBar'
 import { TodayFeedTable } from '@/components/dashboard/TodayFeedTable'
 import { AddStudentModal } from '@/components/dashboard/AddStudentModal'
+import { DashboardStats } from '@/components/dashboard/DashboardStats'
+import { ExpiryBanner } from '@/components/dashboard/ExpiryBanner'
 import { PageTransition } from '@/components/animations/PageTransition'
 import { useHiveStore } from '@/lib/store'
 // ReceiptModal is now handled inside AddStudentModal
@@ -28,6 +30,7 @@ type CheckInStatus = 'idle' | 'loading' | 'success' | 'warning' | 'error'
 
 export default function DashboardPage() {
   const [refreshTrigger, setRefreshTrigger] = useState(0)
+  const [logCount, setLogCount] = useState(0)
   const { setOverlay, setAddStudentOpen } = useHiveStore()
   const [userRole, setUserRole] = useState<string | null>(null)
 
@@ -180,6 +183,12 @@ export default function DashboardPage() {
           Gate Access Security and Desk Accountability Operations Panel
         </p>
       </motion.section>
+
+      {/* Analytics Cards */}
+      <DashboardStats checkInCount={logCount} />
+
+      {/* Expiry Notifications */}
+      <ExpiryBanner />
 
       {/* 2. Search & Add Student Rail */}
       <motion.section
@@ -360,7 +369,7 @@ export default function DashboardPage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.3, duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
       >
-        <TodayFeedTable refreshTrigger={refreshTrigger} onLogsFetched={() => {}} userRole={userRole} />
+        <TodayFeedTable refreshTrigger={refreshTrigger} onLogsFetched={(logs) => setLogCount(logs.length)} userRole={userRole} />
       </motion.section>
 
       <AddStudentModal onCreated={() => setRefreshTrigger((n) => n + 1)} />

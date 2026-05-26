@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server'
+import { randomBytes } from 'crypto'
 import prisma from '@/lib/prisma'
 import { requireAuth } from '@/lib/authGuard'
 import { sanitizeString, sanitizePhone, sanitizeRfid } from '@/lib/sanitize'
@@ -37,8 +38,9 @@ export async function POST(req: NextRequest) {
     if (!fullName || fullName.length < 2) return Response.json({ error: 'Valid name required (min 2 chars)' }, { status: 400 })
     if (!phone || phone.length < 7) return Response.json({ error: 'Valid phone required (min 7 digits)' }, { status: 400 })
 
+    const qrToken = randomBytes(16).toString('hex')
     const student = await prisma.student.create({
-      data: { fullName, phone, major, rfidUuid },
+      data: { fullName, phone, major, rfidUuid, qrToken },
     })
     return Response.json(student, { status: 201 })
   } catch (e: any) {

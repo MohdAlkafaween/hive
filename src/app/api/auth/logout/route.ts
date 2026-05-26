@@ -22,6 +22,20 @@ export async function POST() {
           },
         })
       } catch { /* don't block logout */ }
+
+      // Auto clock-out on logout
+      try {
+        const today = new Date().toISOString().slice(0, 10)
+        const openShift = await prisma.staffShift.findFirst({
+          where: { userId: session.userId as number, date: today, clockOut: null },
+        })
+        if (openShift) {
+          await prisma.staffShift.update({
+            where: { id: openShift.id },
+            data: { clockOut: new Date() },
+          })
+        }
+      } catch { /* don't block logout */ }
     }
   } catch { /* ignore — clearing cookie is what matters */ }
 

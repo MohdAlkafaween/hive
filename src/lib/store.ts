@@ -3,7 +3,7 @@ import { create } from 'zustand'
 import { RefObject } from 'react'
 
 export interface CheckInResult {
-  status: 'OK' | 'EXPIRED' | 'NOT_FOUND' | 'ALREADY_IN'
+  status: 'OK' | 'EXPIRED' | 'NOT_FOUND' | 'ALREADY_IN' | 'FULL'
   student?: { id: number; fullName: string; phone: string }
   subscription?: {
     planType: string

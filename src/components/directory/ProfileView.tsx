@@ -1,6 +1,6 @@
 ﻿'use client'
-import { useState, useEffect, useCallback } from 'react'
-import { ArrowLeft, CreditCard, RefreshCw, Loader2, User, Phone, BookOpen, Activity, Calendar, Hash, CheckCircle, XCircle, Trash2, AlertTriangle, Edit3, Save, Plus, Minus } from 'lucide-react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { ArrowLeft, CreditCard, RefreshCw, Loader2, User, Phone, BookOpen, Activity, Calendar, Hash, CheckCircle, XCircle, Trash2, AlertTriangle, Edit3, Save, Plus, Minus, Camera, Snowflake, QrCode, StickyNote, Send, X } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { RenewModal } from './RenewModal'
@@ -12,6 +12,8 @@ interface Student {
   phone: string
   major?: string
   rfidUuid?: string
+  photoUrl?: string
+  qrToken?: string
   lifetimeCheckIns: number
   createdAt: string
   subscriptions: Subscription[]
@@ -21,9 +23,11 @@ interface Student {
 interface Subscription {
   id: number; planType: string; startDate: string; expiryDate: string
   totalVisitsAllowed: number; visitsUsed: number; isActive: boolean; createdAt: string
+  isFrozen?: boolean; frozenAt?: string; freezeDays?: number
 }
 interface Log { id: number; checkInTime: string; checkOutTime?: string; date: string }
 interface Transaction { id: number; amountPaid: number; planType: string; gateway: string; discountAmount: number; createdAt: string }
+interface Note { id: number; content: string; authorName: string; createdAt: string }
 
 interface ProfileViewProps {
   studentId: number
@@ -45,6 +49,21 @@ export function ProfileView({ studentId, onBack }: ProfileViewProps) {
   const [editingEntries, setEditingEntries] = useState(false)
   const [entryAdjust, setEntryAdjust] = useState(0)
   const [savingEntries, setSavingEntries] = useState(false)
+
+  // Photo upload state
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [uploadingPhoto, setUploadingPhoto] = useState(false)
+
+  // Freeze state
+  const [freezing, setFreezing] = useState(false)
+
+  // Notes state
+  const [notes, setNotes] = useState<Note[]>([])
+  const [newNote, setNewNote] = useState('')
+  const [addingNote, setAddingNote] = useState(false)
+
+  // QR modal state
+  const [qrOpen, setQrOpen] = useState(false)
 
   const fetchStudent = useCallback(async () => {
     setLoading(true)
@@ -136,6 +155,67 @@ export function ProfileView({ studentId, onBack }: ProfileViewProps) {
     }
   }
 
+  // Fetch notes
+  useEffect(() => {
+    fetch(`/api/students/${studentId}/notes`)
+      .then(r => r.ok ? r.json() : [])
+      .then(setNotes)
+      .catch(() => {})
+  }, [studentId])
+
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploadingPhoto(true)
+    try {
+      const formData = new FormData()
+      formData.append('photo', file)
+      const res = await fetch(`/api/students/${studentId}/photo`, { method: 'POST', body: formData })
+      if (res.ok) fetchStudent()
+    } finally {
+      setUploadingPhoto(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
+  const handleFreeze = async (subId: number, freeze: boolean) => {
+    setFreezing(true)
+    try {
+      await fetch(`/api/subscriptions/${subId}/freeze`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: freeze ? 'freeze' : 'unfreeze' }),
+      })
+      fetchStudent()
+    } finally {
+      setFreezing(false)
+    }
+  }
+
+  const handleAddNote = async () => {
+    if (!newNote.trim()) return
+    setAddingNote(true)
+    try {
+      const res = await fetch(`/api/students/${studentId}/notes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: newNote.trim() }),
+      })
+      if (res.ok) {
+        const note = await res.json()
+        setNotes(prev => [note, ...prev])
+        setNewNote('')
+      }
+    } finally {
+      setAddingNote(false)
+    }
+  }
+
+  const handleDeleteNote = async (noteId: number) => {
+    const res = await fetch(`/api/students/${studentId}/notes?noteId=${noteId}`, { method: 'DELETE' })
+    if (res.ok) setNotes(prev => prev.filter(n => n.id !== noteId))
+  }
+
   if (loading) return (
     <div className="flex flex-col items-center justify-center h-full gap-4">
       <Loader2 size={32} className="animate-spin text-[#F5C518]" />
@@ -187,6 +267,31 @@ export function ProfileView({ studentId, onBack }: ProfileViewProps) {
             Personal Info
           </h2>
           <div className="space-y-5 relative z-10">
+            {/* Student Photo */}
+            <div className="flex items-center gap-4 mb-2">
+              <div className="relative group/photo">
+                <div className="w-16 h-16 rounded-full border-2 border-white/10 overflow-hidden bg-white/5 flex items-center justify-center">
+                  {student.photoUrl ? (
+                    <img src={student.photoUrl} alt={student.fullName} className="w-full h-full object-cover" />
+                  ) : (
+                    <User size={28} className="text-white/20" />
+                  )}
+                </div>
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploadingPhoto}
+                  className="absolute inset-0 rounded-full bg-black/50 opacity-0 group-hover/photo:opacity-100 flex items-center justify-center transition-opacity"
+                >
+                  {uploadingPhoto ? <Loader2 size={16} className="animate-spin text-white" /> : <Camera size={16} className="text-white" />}
+                </button>
+                <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handlePhotoUpload} />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-white">{student.fullName}</p>
+                <p className="text-[10px] text-white/30 font-medium">ID #{student.id} • Joined {new Date(student.createdAt).toLocaleDateString('en-JO', { month: 'short', year: 'numeric' })}</p>
+              </div>
+            </div>
+
             <InfoRow icon={<Phone size={14} />} label="Phone" value={student.phone} />
             {student.major && <InfoRow icon={<BookOpen size={14} />} label="Major" value={student.major} />}
             <InfoRow icon={<Activity size={14} />} label="Lifetime Check-Ins" value={student.lifetimeCheckIns.toString()} accent />
@@ -284,6 +389,38 @@ export function ProfileView({ studentId, onBack }: ProfileViewProps) {
             </div>
           )}
           
+          {/* Freeze/Unfreeze button */}
+          {activeSub && !activeSub.isFrozen && (
+            <button
+              onClick={() => handleFreeze(activeSub.id, true)}
+              disabled={freezing}
+              className="w-full mt-3 py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 bg-blue-500/10 border border-blue-500/20 text-blue-400 hover:bg-blue-500/20 transition-all disabled:opacity-40"
+            >
+              {freezing ? <Loader2 size={14} className="animate-spin" /> : <Snowflake size={14} />}
+              Freeze Subscription
+            </button>
+          )}
+          {activeSub?.isFrozen && (
+            <div className="mt-3 space-y-2">
+              <div className="px-3 py-2 rounded-lg bg-blue-500/10 border border-blue-500/20 text-center">
+                <p className="text-xs font-bold text-blue-400 flex items-center justify-center gap-1.5">
+                  <Snowflake size={12} /> Subscription Frozen
+                </p>
+                <p className="text-[10px] text-blue-300/60 mt-0.5">
+                  Frozen {activeSub.freezeDays || 0} days total
+                </p>
+              </div>
+              <button
+                onClick={() => handleFreeze(activeSub.id, false)}
+                disabled={freezing}
+                className="w-full py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 bg-green-500/10 border border-green-500/20 text-green-400 hover:bg-green-500/20 transition-all disabled:opacity-40"
+              >
+                {freezing ? <Loader2 size={14} className="animate-spin" /> : <Snowflake size={14} />}
+                Unfreeze Subscription
+              </button>
+            </div>
+          )}
+
           <Button onClick={() => setRenewOpen(true)} className="w-full mt-5 py-6 text-base font-bold shadow-[0_4px_20px_rgba(245,197,24,0.15)] bg-[#F5C518] hover:bg-[#D4A017] text-white relative z-10">
             <RefreshCw size={18} className="mr-2" />
             Renew Subscription
@@ -309,6 +446,63 @@ export function ProfileView({ studentId, onBack }: ProfileViewProps) {
               </div>
             )}
           </div>
+
+          {/* QR Code Button */}
+          {student.qrToken && (
+            <button
+              onClick={() => setQrOpen(true)}
+              className="mt-4 w-full py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 bg-purple-500/10 border border-purple-500/20 text-purple-400 hover:bg-purple-500/20 transition-all"
+            >
+              <QrCode size={16} />
+              Show QR Code
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Notes Section */}
+      <div className="border border-white/8 rounded-2xl p-6" style={{ background: 'rgba(255,255,255,0.04)' }}>
+        <h2 className="text-[11px] font-bold text-white/40 uppercase tracking-widest mb-5 flex items-center gap-2">
+          <StickyNote size={14} className="text-[#F5C518]" />
+          Notes
+        </h2>
+        <div className="flex gap-2 mb-4">
+          <input
+            value={newNote}
+            onChange={(e) => setNewNote(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAddNote() } }}
+            placeholder="Add a note about this student..."
+            className="flex-1 px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white text-sm placeholder:text-white/20 focus:border-[#F5C518]/40 focus:outline-none transition-colors"
+            maxLength={1000}
+          />
+          <button
+            onClick={handleAddNote}
+            disabled={addingNote || !newNote.trim()}
+            className="px-4 py-3 rounded-xl bg-[#F5C518] hover:bg-[#D4A017] text-black font-bold text-sm flex items-center gap-1.5 disabled:opacity-40 transition-all"
+          >
+            {addingNote ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+          </button>
+        </div>
+        <div className="space-y-2 max-h-[200px] overflow-auto pr-2 custom-scrollbar">
+          {notes.map((note) => (
+            <div key={note.id} className="group flex items-start gap-3 p-3 rounded-xl bg-white/3 border border-white/8 hover:bg-white/5 transition-colors">
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-white/80 whitespace-pre-wrap break-words">{note.content}</p>
+                <p className="text-[10px] text-white/25 mt-1.5 font-medium">
+                  {note.authorName.split('@')[0]} • {new Date(note.createdAt).toLocaleDateString('en-JO', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                </p>
+              </div>
+              <button
+                onClick={() => handleDeleteNote(note.id)}
+                className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg hover:bg-red-500/10 text-white/20 hover:text-red-400 transition-all shrink-0"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          ))}
+          {notes.length === 0 && (
+            <p className="text-sm text-white/20 text-center py-4">No notes yet.</p>
+          )}
         </div>
       </div>
 
@@ -409,6 +603,26 @@ export function ProfileView({ studentId, onBack }: ProfileViewProps) {
               {deleting ? 'Deleting...' : 'Delete Permanently'}
             </Button>
           </div>
+        </div>
+      </Modal>
+
+      {/* QR Code Modal */}
+      <Modal open={qrOpen} onClose={() => setQrOpen(false)} title="QR Code" maxWidth="max-w-sm">
+        <div className="flex flex-col items-center gap-4 py-4">
+          <div className="p-4 bg-white rounded-2xl">
+            <img
+              src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(student?.qrToken || '')}`}
+              alt="QR Code"
+              className="w-48 h-48"
+            />
+          </div>
+          <div className="text-center">
+            <p className="text-sm font-bold text-white">{student?.fullName}</p>
+            <p className="text-[10px] text-white/30 mt-1 font-mono">{student?.qrToken}</p>
+          </div>
+          <p className="text-[11px] text-white/30 text-center">
+            Students can scan this QR code at the kiosk to check in without an RFID card.
+          </p>
         </div>
       </Modal>
 

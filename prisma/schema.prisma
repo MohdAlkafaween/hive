@@ -47,26 +47,33 @@ model Student {
   phone            String         @unique
   major            String?
   rfidUuid         String?        @unique
+  photoUrl         String?        // avatar / photo path
+  qrToken          String?        @unique // unique token for QR code check-in
   createdAt        DateTime       @default(now())
   lifetimeCheckIns Int            @default(0)
   subscriptions    Subscription[]
   logs             Log[]
   transactions     Transaction[]
   promoUsages      PromoUsage[]
+  notes            StudentNote[]
+  waitlistEntries  WaitlistEntry[]
 }
 
 model Subscription {
-  id                 Int      @id @default(autoincrement())
+  id                 Int       @id @default(autoincrement())
   studentId          Int?
-  student            Student? @relation(fields: [studentId], references: [id], onDelete: SetNull)
-  studentName        String   @default("") // denormalized — readable after student deletion
+  student            Student?  @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  studentName        String    @default("") // denormalized — readable after student deletion
   planType           String
-  startDate          DateTime @default(now())
+  startDate          DateTime  @default(now())
   expiryDate         DateTime
   totalVisitsAllowed Int
-  visitsUsed         Int      @default(0)
-  isActive           Boolean  @default(true)
-  createdAt          DateTime @default(now())
+  visitsUsed         Int       @default(0)
+  isActive           Boolean   @default(true)
+  isFrozen           Boolean   @default(false)
+  frozenAt           DateTime?
+  freezeDays         Int       @default(0) // total days frozen — added back to expiry on unfreeze
+  createdAt          DateTime  @default(now())
 }
 
 model Log {
@@ -133,4 +140,40 @@ model PromoUsage {
   studentName String    @default("") // denormalized — readable after student deletion
   discount    Float     // actual discount applied
   createdAt   DateTime  @default(now())
+}
+
+model StudentNote {
+  id        Int      @id @default(autoincrement())
+  studentId Int
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  content   String
+  authorId  Int?     // staff user who wrote the note
+  authorName String  @default("")
+  createdAt DateTime @default(now())
+}
+
+model StaffShift {
+  id         Int       @id @default(autoincrement())
+  userId     Int
+  email      String    // denormalized
+  role       String
+  clockIn    DateTime  @default(now())
+  clockOut   DateTime?
+  date       String    // YYYY-MM-DD for easy queries
+}
+
+model AppSetting {
+  id    Int    @id @default(autoincrement())
+  key   String @unique
+  value String
+}
+
+model WaitlistEntry {
+  id        Int      @id @default(autoincrement())
+  studentId Int
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  date      String   // YYYY-MM-DD
+  position  Int      // queue position
+  status    String   @default("WAITING") // WAITING, ADMITTED, CANCELLED
+  createdAt DateTime @default(now())
 }

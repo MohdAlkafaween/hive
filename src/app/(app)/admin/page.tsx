@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Trash2, ToggleLeft, ToggleRight, Loader2, Tag, Users, Shield, Ticket, Calendar, Hash, Percent, DollarSign, ChevronDown, ChevronUp, User, KeyRound, ClipboardList, LogIn, LogOut, Eye, EyeOff, ChevronLeft, ChevronRight, Filter, ArrowLeft, Phone, Mail, Clock, Edit3, Save, X, UserX, UserCheck as UserCheckIcon, CalendarDays } from 'lucide-react'
+import { Plus, Trash2, ToggleLeft, ToggleRight, Loader2, Tag, Users, Shield, Ticket, Calendar, Hash, Percent, DollarSign, ChevronDown, ChevronUp, User, KeyRound, ClipboardList, LogIn, LogOut, Eye, EyeOff, ChevronLeft, ChevronRight, Filter, ArrowLeft, Phone, Mail, Clock, Edit3, Save, X, UserX, UserCheck as UserCheckIcon, CalendarDays, Database, Download, Upload, HardDrive } from 'lucide-react'
 import { PageTransition } from '@/components/animations/PageTransition'
 import { AnimatedTabs } from '@/components/animations/AnimatedTabs'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
@@ -68,7 +68,17 @@ interface AuditLogEntry {
   user: { id: number; email: string; role: string } | null
 }
 
-type ActiveTab = 'promos' | 'users' | 'audit'
+interface ShiftEntry {
+  id: number
+  userId: number
+  email: string
+  role: string
+  date: string
+  clockIn: string
+  clockOut: string | null
+}
+
+type ActiveTab = 'promos' | 'users' | 'audit' | 'shifts' | 'backup'
 
 export default function AdminPage() {
   const [tab, setTab] = useState<ActiveTab>('promos')
@@ -101,7 +111,9 @@ export default function AdminPage() {
         tabs={[
           { id: 'promos', label: 'Promo Codes', icon: <Ticket size={16} /> },
           { id: 'users', label: 'Staff & Passwords', icon: <KeyRound size={16} /> },
-          { id: 'audit', label: 'Staff Audit Log', icon: <ClipboardList size={16} /> },
+          { id: 'shifts', label: 'Staff Shifts', icon: <Clock size={16} /> },
+          { id: 'audit', label: 'Audit Log', icon: <ClipboardList size={16} /> },
+          { id: 'backup', label: 'Backup', icon: <Database size={16} /> },
         ]}
         activeTab={tab}
         onChange={(id) => setTab(id as ActiveTab)}
@@ -109,7 +121,9 @@ export default function AdminPage() {
 
       {tab === 'promos' && <PromoSection />}
       {tab === 'users' && <UsersSection />}
+      {tab === 'shifts' && <ShiftsSection />}
       {tab === 'audit' && <AuditLogSection />}
+      {tab === 'backup' && <BackupSection />}
     </div>
     </PageTransition>
   )
@@ -1315,5 +1329,268 @@ function StaffDetailView({ userId, onBack }: { userId: number; onBack: () => voi
         )}
       </div>
     </motion.div>
+  )
+}
+
+/* ======================== STAFF SHIFTS SECTION ======================== */
+function ShiftsSection() {
+  const [shifts, setShifts] = useState<ShiftEntry[]>([])
+  const [loading, setLoading] = useState(true)
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().slice(0, 10))
+
+  const fetchShifts = useCallback(async () => {
+    setLoading(true)
+    try {
+      const res = await fetch(`/api/shifts?date=${selectedDate}`)
+      if (res.ok) setShifts(await res.json())
+    } catch {} finally { setLoading(false) }
+  }, [selectedDate])
+
+  useEffect(() => { fetchShifts() }, [fetchShifts])
+
+  const formatTime = (iso: string) => new Date(iso).toLocaleTimeString('en-JO', { hour: '2-digit', minute: '2-digit' })
+  const getDuration = (clockIn: string, clockOut: string | null) => {
+    if (!clockOut) return 'Active'
+    const ms = new Date(clockOut).getTime() - new Date(clockIn).getTime()
+    const h = Math.floor(ms / 3600000)
+    const m = Math.floor((ms % 3600000) / 60000)
+    return `${h}h ${m}m`
+  }
+
+  const roleColors: Record<string, string> = {
+    ADMIN: 'text-red-400', MANAGER: 'text-amber-400', BARISTA: 'text-purple-400', REGISTERATION_COUNTER: 'text-blue-400',
+  }
+  const roleBgs: Record<string, string> = {
+    ADMIN: 'rgba(239, 68, 68, 0.1)', MANAGER: 'rgba(245, 158, 11, 0.1)', BARISTA: 'rgba(168, 85, 247, 0.1)', REGISTERATION_COUNTER: 'rgba(59, 130, 246, 0.1)',
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-white/30">{shifts.length} shift{shifts.length !== 1 ? 's' : ''} on this date</p>
+        <input
+          type="date"
+          value={selectedDate}
+          onChange={(e) => setSelectedDate(e.target.value)}
+          className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-[#F5C518] outline-none"
+          style={{ colorScheme: 'dark' }}
+        />
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center py-12"><Loader2 size={24} className="animate-spin text-white/25" /></div>
+      ) : shifts.length === 0 ? (
+        <div className="text-center py-16 text-white/25">
+          <Clock size={40} className="mx-auto mb-3 opacity-40" />
+          <p className="text-sm font-medium">No shifts recorded</p>
+          <p className="text-xs text-white/20">Staff shifts are auto-logged on login/logout</p>
+        </div>
+      ) : (
+        <div className="hive-card !rounded-2xl !p-0 overflow-hidden">
+          <table className="w-full text-sm text-left">
+            <thead style={{ background: 'rgba(10,10,10,0.95)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+              <tr>
+                {['Staff', 'Role', 'Clock In', 'Clock Out', 'Duration'].map((h) => (
+                  <th key={h} className="px-5 py-4 text-[10px] font-bold text-white/30 uppercase tracking-wider">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {shifts.map((shift) => (
+                <tr key={shift.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }} className="hover:bg-white/3 transition-colors">
+                  <td className="px-5 py-4 font-semibold text-white/80">{shift.email.split('@')[0]}</td>
+                  <td className="px-5 py-4">
+                    <span className={`px-2 py-1 rounded-md text-[10px] font-bold ${roleColors[shift.role] || 'text-white/40'}`}
+                      style={{ background: roleBgs[shift.role] || 'rgba(255,255,255,0.05)' }}>
+                      {shift.role === 'REGISTERATION_COUNTER' ? 'Counter' : shift.role}
+                    </span>
+                  </td>
+                  <td className="px-5 py-4 font-mono text-white/60">{formatTime(shift.clockIn)}</td>
+                  <td className="px-5 py-4 font-mono text-white/60">{shift.clockOut ? formatTime(shift.clockOut) : <span className="text-green-400 text-xs font-bold">Active</span>}</td>
+                  <td className="px-5 py-4">
+                    <span className={`text-xs font-bold ${shift.clockOut ? 'text-white/50' : 'text-green-400'}`}>
+                      {getDuration(shift.clockIn, shift.clockOut)}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ======================== BACKUP & SETTINGS SECTION ======================== */
+function BackupSection() {
+  const [downloading, setDownloading] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [status, setStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+
+  // Settings
+  const [maxCapacity, setMaxCapacity] = useState('')
+  const [savingCapacity, setSavingCapacity] = useState(false)
+  const [capacityStatus, setCapacityStatus] = useState('')
+
+  useEffect(() => {
+    fetch('/api/settings')
+      .then(r => r.ok ? r.json() : {})
+      .then((s: Record<string, unknown>) => { if (s.maxCapacity) setMaxCapacity(String(s.maxCapacity)) })
+      .catch(() => {})
+  }, [])
+
+  const handleSaveCapacity = async () => {
+    setSavingCapacity(true)
+    setCapacityStatus('')
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'maxCapacity', value: maxCapacity }),
+      })
+      if (res.ok) setCapacityStatus('Saved!')
+      else setCapacityStatus('Failed to save')
+    } finally {
+      setSavingCapacity(false)
+      setTimeout(() => setCapacityStatus(''), 2000)
+    }
+  }
+
+  const handleBackup = async () => {
+    setDownloading(true)
+    setStatus(null)
+    try {
+      const res = await fetch('/api/backup')
+      if (!res.ok) { setStatus({ type: 'error', message: 'Failed to download backup' }); return }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `hive-backup-${new Date().toISOString().slice(0, 10)}.db`
+      a.click()
+      URL.revokeObjectURL(url)
+      setStatus({ type: 'success', message: 'Backup downloaded successfully!' })
+    } catch {
+      setStatus({ type: 'error', message: 'Failed to download backup' })
+    } finally {
+      setDownloading(false)
+    }
+  }
+
+  const handleRestore = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (!window.confirm('⚠️ Restoring will REPLACE all current data. Are you absolutely sure?')) return
+    setUploading(true)
+    setStatus(null)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      const res = await fetch('/api/backup', { method: 'POST', body: formData })
+      if (res.ok) {
+        setStatus({ type: 'success', message: 'Database restored successfully! Please refresh the page.' })
+      } else {
+        const data = await res.json().catch(() => ({}))
+        setStatus({ type: 'error', message: data.error || 'Restore failed' })
+      }
+    } catch {
+      setStatus({ type: 'error', message: 'Restore failed' })
+    } finally {
+      setUploading(false)
+      e.target.value = ''
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Capacity Setting */}
+      <div className="hive-card !rounded-2xl">
+        <h3 className="text-sm font-bold text-white flex items-center gap-2 mb-4">
+          <Users size={16} className="text-[#F5C518]" />
+          Capacity Settings
+        </h3>
+        <p className="text-xs text-white/30 mb-4">Set the maximum number of students allowed inside at once. Set to 0 for unlimited.</p>
+        <div className="flex items-center gap-3">
+          <input
+            type="number"
+            value={maxCapacity}
+            onChange={(e) => setMaxCapacity(e.target.value)}
+            placeholder="e.g. 50"
+            min="0"
+            className="w-32 bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white focus:border-[#F5C518] outline-none"
+          />
+          <button
+            onClick={handleSaveCapacity}
+            disabled={savingCapacity}
+            className="px-4 py-2.5 rounded-lg bg-[#F5C518] hover:bg-[#D5A711] text-black font-bold text-sm transition-all disabled:opacity-40 flex items-center gap-2"
+          >
+            {savingCapacity ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+            Save
+          </button>
+          {capacityStatus && <span className="text-xs font-bold text-green-400">{capacityStatus}</span>}
+        </div>
+      </div>
+
+      {/* Backup & Restore */}
+      <div className="hive-card !rounded-2xl">
+        <h3 className="text-sm font-bold text-white flex items-center gap-2 mb-4">
+          <HardDrive size={16} className="text-[#F5C518]" />
+          Database Backup & Restore
+        </h3>
+        <p className="text-xs text-white/30 mb-6">
+          Download a copy of the entire HIVE database, or restore from a previous backup file.
+        </p>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Download */}
+          <div className="p-5 rounded-xl border border-white/8" style={{ background: 'rgba(255,255,255,0.02)' }}>
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'rgba(34, 197, 94, 0.1)' }}>
+                <Download size={20} className="text-green-400" />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-white">Download Backup</p>
+                <p className="text-[10px] text-white/25">Export SQLite database file</p>
+              </div>
+            </div>
+            <button
+              onClick={handleBackup}
+              disabled={downloading}
+              className="w-full py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 bg-green-500/10 border border-green-500/20 text-green-400 hover:bg-green-500/20 transition-all disabled:opacity-40"
+            >
+              {downloading ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+              {downloading ? 'Downloading...' : 'Download .db File'}
+            </button>
+          </div>
+
+          {/* Restore */}
+          <div className="p-5 rounded-xl border border-red-500/10" style={{ background: 'rgba(239, 68, 68, 0.02)' }}>
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'rgba(239, 68, 68, 0.1)' }}>
+                <Upload size={20} className="text-red-400" />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-white">Restore Backup</p>
+                <p className="text-[10px] text-red-400/60">⚠️ Replaces all current data</p>
+              </div>
+            </div>
+            <label className="w-full py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 transition-all cursor-pointer">
+              {uploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+              {uploading ? 'Restoring...' : 'Upload .db File'}
+              <input type="file" accept=".db,.sqlite,.sqlite3" className="hidden" onChange={handleRestore} disabled={uploading} />
+            </label>
+          </div>
+        </div>
+
+        {status && (
+          <div className={`mt-4 p-3 rounded-xl text-sm font-medium flex items-center gap-2 ${
+            status.type === 'success' ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'
+          }`}>
+            {status.type === 'success' ? '✓' : '✕'} {status.message}
+          </div>
+        )}
+      </div>
+    </div>
   )
 }

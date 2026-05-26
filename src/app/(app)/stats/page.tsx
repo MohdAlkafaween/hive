@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { BarChart3, TrendingUp, Users, Minus, ChevronDown, ChevronUp, Loader2, Calendar as CalendarIcon, DollarSign, Activity, Trash2, Lock } from 'lucide-react'
+import { BarChart3, TrendingUp, Users, Minus, ChevronDown, ChevronUp, Loader2, Calendar as CalendarIcon, DollarSign, Activity, Trash2, Lock, FileText } from 'lucide-react'
 import { ExcelExport } from '@/components/stats/ExcelExport'
 import { PageTransition } from '@/components/animations/PageTransition'
 import { SkeletonGrid } from '@/components/animations/SkeletonCard'
@@ -50,6 +50,10 @@ export default function StatsPage() {
   const [userRole, setUserRole] = useState<string | null>(null)
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null)
   const [deleting, setDeleting] = useState<number | null>(null)
+  const [monthlyReport, setMonthlyReport] = useState<any>(null)
+  const [reportMonth, setReportMonth] = useState(new Date().toISOString().slice(0, 7))
+  const [reportLoading, setReportLoading] = useState(false)
+  const [showReport, setShowReport] = useState(false)
 
   const isAdmin = userRole === 'ADMIN'
 
@@ -68,6 +72,16 @@ export default function StatsPage() {
   }, [date])
 
   useEffect(() => { fetchStats() }, [fetchStats])
+
+  const fetchReport = useCallback(async () => {
+    setReportLoading(true)
+    try {
+      const res = await fetch(`/api/reports?month=${reportMonth}`)
+      if (res.ok) setMonthlyReport(await res.json())
+    } finally { setReportLoading(false) }
+  }, [reportMonth])
+
+  useEffect(() => { if (showReport) fetchReport() }, [showReport, fetchReport])
 
   const handleDeleteTransaction = async () => {
     if (confirmDeleteId === null) return
@@ -323,6 +337,62 @@ export default function StatsPage() {
             )}
           </div>
         </>
+      )}
+
+      {/* Monthly Report */}
+      {isAdmin && (
+        <div className="hive-card !rounded-2xl">
+          <button
+            onClick={() => setShowReport(!showReport)}
+            className="w-full flex items-center justify-between"
+          >
+            <h2 className="text-[11px] font-bold text-white/40 uppercase tracking-widest flex items-center gap-2">
+              <FileText size={14} className="text-[#F5C518]" />
+              Monthly Report
+            </h2>
+            {showReport ? <ChevronUp size={16} className="text-white/30" /> : <ChevronDown size={16} className="text-white/30" />}
+          </button>
+
+          <AnimatePresence>
+          {showReport && (
+            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+              className="overflow-hidden">
+              <div className="pt-4 space-y-4">
+                <input
+                  type="month"
+                  value={reportMonth}
+                  onChange={(e) => setReportMonth(e.target.value)}
+                  className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-[#F5C518] outline-none"
+                  style={{ colorScheme: 'dark' }}
+                />
+
+                {reportLoading ? (
+                  <div className="flex justify-center py-8"><Loader2 size={20} className="animate-spin text-white/25" /></div>
+                ) : monthlyReport ? (
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div className="p-4 rounded-xl text-center" style={{ background: 'rgba(34, 197, 94, 0.06)', border: '1px solid rgba(34, 197, 94, 0.15)' }}>
+                      <p className="text-[10px] font-bold text-white/30 uppercase tracking-wider">Revenue</p>
+                      <p className="text-xl font-black text-green-400 mt-1">{monthlyReport.totalRevenue?.toFixed(1)} JD</p>
+                    </div>
+                    <div className="p-4 rounded-xl text-center" style={{ background: 'rgba(59, 130, 246, 0.06)', border: '1px solid rgba(59, 130, 246, 0.15)' }}>
+                      <p className="text-[10px] font-bold text-white/30 uppercase tracking-wider">Check-Ins</p>
+                      <p className="text-xl font-black text-blue-400 mt-1">{monthlyReport.totalCheckIns}</p>
+                    </div>
+                    <div className="p-4 rounded-xl text-center" style={{ background: 'rgba(168, 85, 247, 0.06)', border: '1px solid rgba(168, 85, 247, 0.15)' }}>
+                      <p className="text-[10px] font-bold text-white/30 uppercase tracking-wider">New Subs</p>
+                      <p className="text-xl font-black text-purple-400 mt-1">{monthlyReport.newSubscriptions}</p>
+                    </div>
+                    <div className="p-4 rounded-xl text-center" style={{ background: 'rgba(245, 197, 24, 0.06)', border: '1px solid rgba(245, 197, 24, 0.15)' }}>
+                      <p className="text-[10px] font-bold text-white/30 uppercase tracking-wider">Staff Hours</p>
+                      <p className="text-xl font-black text-[#F5C518] mt-1">{monthlyReport.staffHours?.toFixed(1)}h</p>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            </motion.div>
+          )}
+          </AnimatePresence>
+        </div>
       )}
 
       <style>{`

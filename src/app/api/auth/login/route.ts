@@ -81,6 +81,19 @@ export async function POST(req: Request) {
       })
     } catch { /* don't block login if audit DB write fails */ }
 
+    // Auto clock-in for staff shift tracking
+    try {
+      const today = new Date().toISOString().slice(0, 10)
+      const existingShift = await prisma.staffShift.findFirst({
+        where: { userId: user.id, date: today, clockOut: null },
+      })
+      if (!existingShift) {
+        await prisma.staffShift.create({
+          data: { userId: user.id, email: user.email, role: user.role, date: today },
+        })
+      }
+    } catch { /* don't block login if shift tracking fails */ }
+
     const sessionToken = await encrypt({ userId: user.id, email: user.email, role: user.role, permissions: user.permissions || '[]' })
 
     const res = NextResponse.json({
