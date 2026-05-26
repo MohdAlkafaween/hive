@@ -6,6 +6,7 @@ import { ExcelExport } from '@/components/stats/ExcelExport'
 import { PageTransition } from '@/components/animations/PageTransition'
 import { SkeletonGrid } from '@/components/animations/SkeletonCard'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
+import { RevenueChart } from '@/components/stats/RevenueChart'
 
 interface DailyStats {
   date: string
@@ -171,6 +172,15 @@ export default function StatsPage() {
               glow="bg-red-500/8"
             />
           </motion.div>
+
+          {/* Revenue & Check-In Chart */}
+          <div className="hive-card !rounded-2xl">
+            <h2 className="text-[11px] font-bold text-white/40 uppercase tracking-widest mb-4 flex items-center gap-2">
+              <TrendingUp size={14} className="text-[#F5C518]" />
+              Revenue & Traffic Trends
+            </h2>
+            <RevenueChart />
+          </div>
 
           {/* More Details Accordion — ADMIN ONLY */}
           {isAdmin ? (
@@ -372,22 +382,26 @@ export default function StatsPage() {
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     <div className="p-4 rounded-xl text-center" style={{ background: 'rgba(34, 197, 94, 0.06)', border: '1px solid rgba(34, 197, 94, 0.15)' }}>
                       <p className="text-[10px] font-bold text-white/30 uppercase tracking-wider">Revenue</p>
-                      <p className="text-xl font-black text-green-400 mt-1">{monthlyReport.totalRevenue?.toFixed(1)} JD</p>
+                      <p className="text-xl font-black text-green-400 mt-1">{(monthlyReport.totalRevenue ?? 0).toFixed(1)} JD</p>
                     </div>
                     <div className="p-4 rounded-xl text-center" style={{ background: 'rgba(59, 130, 246, 0.06)', border: '1px solid rgba(59, 130, 246, 0.15)' }}>
                       <p className="text-[10px] font-bold text-white/30 uppercase tracking-wider">Check-Ins</p>
-                      <p className="text-xl font-black text-blue-400 mt-1">{monthlyReport.totalCheckIns}</p>
+                      <p className="text-xl font-black text-blue-400 mt-1">{monthlyReport.totalCheckIns ?? 0}</p>
                     </div>
                     <div className="p-4 rounded-xl text-center" style={{ background: 'rgba(168, 85, 247, 0.06)', border: '1px solid rgba(168, 85, 247, 0.15)' }}>
                       <p className="text-[10px] font-bold text-white/30 uppercase tracking-wider">New Subs</p>
-                      <p className="text-xl font-black text-purple-400 mt-1">{monthlyReport.newSubscriptions}</p>
+                      <p className="text-xl font-black text-purple-400 mt-1">{monthlyReport.newSubscriptions ?? 0}</p>
                     </div>
                     <div className="p-4 rounded-xl text-center" style={{ background: 'rgba(245, 197, 24, 0.06)', border: '1px solid rgba(245, 197, 24, 0.15)' }}>
                       <p className="text-[10px] font-bold text-white/30 uppercase tracking-wider">Staff Hours</p>
-                      <p className="text-xl font-black text-[#F5C518] mt-1">{monthlyReport.staffHours?.toFixed(1)}h</p>
+                      <p className="text-xl font-black text-[#F5C518] mt-1">{(monthlyReport.staffHours ?? 0).toFixed(1)}h</p>
                     </div>
                   </div>
-                ) : null}
+                ) : (
+                  <div className="p-6 text-center border border-dashed border-white/10 rounded-xl text-white/25 text-sm">
+                    No data available for this month.
+                  </div>
+                )}
               </div>
             </motion.div>
           )}

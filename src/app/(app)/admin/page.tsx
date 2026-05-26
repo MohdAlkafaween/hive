@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Trash2, ToggleLeft, ToggleRight, Loader2, Tag, Users, Shield, Ticket, Calendar, Hash, Percent, DollarSign, ChevronDown, ChevronUp, User, KeyRound, ClipboardList, LogIn, LogOut, Eye, EyeOff, ChevronLeft, ChevronRight, Filter, ArrowLeft, Phone, Mail, Clock, Edit3, Save, X, UserX, UserCheck as UserCheckIcon, CalendarDays, Database, Download, Upload, HardDrive } from 'lucide-react'
+import { Plus, Trash2, ToggleLeft, ToggleRight, Loader2, Tag, Users, Shield, Ticket, Calendar, Hash, Percent, DollarSign, ChevronDown, ChevronUp, User, KeyRound, ClipboardList, LogIn, LogOut, Eye, EyeOff, ChevronLeft, ChevronRight, Filter, ArrowLeft, Phone, Mail, Clock, Edit3, Save, X, UserX, UserCheck as UserCheckIcon, CalendarDays, Database, Download, Upload, HardDrive, Monitor } from 'lucide-react'
 import { PageTransition } from '@/components/animations/PageTransition'
 import { AnimatedTabs } from '@/components/animations/AnimatedTabs'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
@@ -1433,12 +1433,106 @@ function BackupSection() {
   const [savingCapacity, setSavingCapacity] = useState(false)
   const [capacityStatus, setCapacityStatus] = useState('')
 
+  // Plan pricing
+  const [planPrices, setPlanPrices] = useState({ Daily: '3', Weekly: '15', Monthly: '50' })
+  const [planVisits, setPlanVisits] = useState({ Daily: '999', Weekly: '7', Monthly: '30' })
+  const [planDays, setPlanDays] = useState({ Daily: '1', Weekly: '10', Monthly: '40' })
+  const [savingPlans, setSavingPlans] = useState(false)
+  const [planStatus, setPlanStatus] = useState('')
+
+  // Public display settings
+  const [displayEnabled, setDisplayEnabled] = useState(false)
+  const [displayConnection, setDisplayConnection] = useState('hdmi')
+  const [savingDisplay, setSavingDisplay] = useState(false)
+  const [displayStatus, setDisplayStatus] = useState('')
+
+  // QR code settings
+  const [qrEnabled, setQrEnabled] = useState(false)
+  const [savingQr, setSavingQr] = useState(false)
+  const [qrStatus, setQrStatus] = useState('')
+
   useEffect(() => {
     fetch('/api/settings')
       .then(r => r.ok ? r.json() : {})
-      .then((s: Record<string, unknown>) => { if (s.maxCapacity) setMaxCapacity(String(s.maxCapacity)) })
+      .then((s: Record<string, unknown>) => {
+        if (s.maxCapacity) setMaxCapacity(String(s.maxCapacity))
+        if (s.planPriceDaily) setPlanPrices(prev => ({ ...prev, Daily: String(s.planPriceDaily) }))
+        if (s.planPriceWeekly) setPlanPrices(prev => ({ ...prev, Weekly: String(s.planPriceWeekly) }))
+        if (s.planPriceMonthly) setPlanPrices(prev => ({ ...prev, Monthly: String(s.planPriceMonthly) }))
+        if (s.planVisitsDaily) setPlanVisits(prev => ({ ...prev, Daily: String(s.planVisitsDaily) }))
+        if (s.planVisitsWeekly) setPlanVisits(prev => ({ ...prev, Weekly: String(s.planVisitsWeekly) }))
+        if (s.planVisitsMonthly) setPlanVisits(prev => ({ ...prev, Monthly: String(s.planVisitsMonthly) }))
+        if (s.planDaysDaily) setPlanDays(prev => ({ ...prev, Daily: String(s.planDaysDaily) }))
+        if (s.planDaysWeekly) setPlanDays(prev => ({ ...prev, Weekly: String(s.planDaysWeekly) }))
+        if (s.planDaysMonthly) setPlanDays(prev => ({ ...prev, Monthly: String(s.planDaysMonthly) }))
+        if (s.publicDisplayEnabled) setDisplayEnabled(s.publicDisplayEnabled === 'true')
+        if (s.publicDisplayConnection) setDisplayConnection(String(s.publicDisplayConnection))
+        if (s.qrEnabled !== undefined) setQrEnabled(s.qrEnabled === 'true')
+      })
       .catch(() => {})
   }, [])
+
+  const handleSavePlans = async () => {
+    setSavingPlans(true)
+    setPlanStatus('')
+    try {
+      const settings = [
+        { key: 'planPriceDaily', value: planPrices.Daily },
+        { key: 'planPriceWeekly', value: planPrices.Weekly },
+        { key: 'planPriceMonthly', value: planPrices.Monthly },
+        { key: 'planVisitsDaily', value: planVisits.Daily },
+        { key: 'planVisitsWeekly', value: planVisits.Weekly },
+        { key: 'planVisitsMonthly', value: planVisits.Monthly },
+        { key: 'planDaysDaily', value: planDays.Daily },
+        { key: 'planDaysWeekly', value: planDays.Weekly },
+        { key: 'planDaysMonthly', value: planDays.Monthly },
+      ]
+      await Promise.all(settings.map(s =>
+        fetch('/api/settings', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(s),
+        })
+      ))
+      setPlanStatus('Saved!')
+    } catch {
+      setPlanStatus('Failed to save')
+    } finally {
+      setSavingPlans(false)
+      setTimeout(() => setPlanStatus(''), 2000)
+    }
+  }
+
+  const handleSaveDisplay = async () => {
+    setSavingDisplay(true)
+    setDisplayStatus('')
+    try {
+      await Promise.all([
+        fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'publicDisplayEnabled', value: String(displayEnabled) }) }),
+        fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'publicDisplayConnection', value: displayConnection }) }),
+      ])
+      setDisplayStatus('Saved!')
+    } catch {
+      setDisplayStatus('Failed')
+    } finally {
+      setSavingDisplay(false)
+      setTimeout(() => setDisplayStatus(''), 2000)
+    }
+  }
+
+  const handleSaveQr = async () => {
+    setSavingQr(true)
+    setQrStatus('')
+    try {
+      await fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'qrEnabled', value: String(qrEnabled) }) })
+      setQrStatus('Saved!')
+    } catch {
+      setQrStatus('Failed')
+    } finally {
+      setSavingQr(false)
+      setTimeout(() => setQrStatus(''), 2000)
+    }
+  }
 
   const handleSaveCapacity = async () => {
     setSavingCapacity(true)
@@ -1529,6 +1623,131 @@ function BackupSection() {
             Save
           </button>
           {capacityStatus && <span className="text-xs font-bold text-green-400">{capacityStatus}</span>}
+        </div>
+      </div>
+
+      {/* Plan Pricing Config */}
+      <div className="hive-card !rounded-2xl">
+        <h3 className="text-sm font-bold text-white flex items-center gap-2 mb-4">
+          <DollarSign size={16} className="text-[#F5C518]" />
+          Plan Pricing
+        </h3>
+        <p className="text-xs text-white/30 mb-4">Configure subscription plan prices, visit limits, and durations.</p>
+        <div className="grid grid-cols-3 gap-4">
+          {(['Daily', 'Weekly', 'Monthly'] as const).map((plan) => (
+            <div key={plan} className="p-4 rounded-xl border border-white/8" style={{ background: 'rgba(255,255,255,0.02)' }}>
+              <p className="text-sm font-bold text-[#F5C518] mb-3">{plan}</p>
+              <div className="space-y-2">
+                <div>
+                  <label className="text-[9px] font-bold text-white/25 uppercase">Price (JD)</label>
+                  <input type="number" value={planPrices[plan]} onChange={(e) => setPlanPrices(p => ({ ...p, [plan]: e.target.value }))} min="0" step="0.5"
+                    className="w-full bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-sm text-white focus:border-[#F5C518] outline-none mt-1" />
+                </div>
+                <div>
+                  <label className="text-[9px] font-bold text-white/25 uppercase">Visits</label>
+                  <input type="number" value={planVisits[plan]} onChange={(e) => setPlanVisits(p => ({ ...p, [plan]: e.target.value }))} min="1"
+                    className="w-full bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-sm text-white focus:border-[#F5C518] outline-none mt-1" />
+                </div>
+                <div>
+                  <label className="text-[9px] font-bold text-white/25 uppercase">Calendar Days</label>
+                  <input type="number" value={planDays[plan]} onChange={(e) => setPlanDays(p => ({ ...p, [plan]: e.target.value }))} min="1"
+                    className="w-full bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-sm text-white focus:border-[#F5C518] outline-none mt-1" />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="flex items-center gap-3 mt-4">
+          <button onClick={handleSavePlans} disabled={savingPlans}
+            className="px-4 py-2.5 rounded-lg bg-[#F5C518] hover:bg-[#D5A711] text-black font-bold text-sm transition-all disabled:opacity-40 flex items-center gap-2">
+            {savingPlans ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Save Plans
+          </button>
+          {planStatus && <span className="text-xs font-bold text-green-400">{planStatus}</span>}
+        </div>
+      </div>
+
+      {/* QR Code Toggle */}
+      <div className="hive-card !rounded-2xl">
+        <h3 className="text-sm font-bold text-white flex items-center gap-2 mb-2">
+          <Hash size={16} className="text-[#F5C518]" />
+          QR Code Check-In
+        </h3>
+        <p className="text-xs text-white/30 mb-4">
+          Enable QR codes on student profiles for kiosk check-in. Only enable this after deploying to a public URL — QR codes won&apos;t work on localhost.
+        </p>
+
+        <div className="flex items-center gap-4 mb-4">
+          <label className="flex items-center gap-3 cursor-pointer">
+            <div className={`relative w-12 h-6 rounded-full transition-all ${qrEnabled ? 'bg-[#F5C518]' : 'bg-white/10'}`}
+              onClick={() => setQrEnabled(!qrEnabled)}>
+              <div className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-all ${qrEnabled ? 'left-7' : 'left-1'}`} />
+            </div>
+            <span className={`text-sm font-bold ${qrEnabled ? 'text-[#F5C518]' : 'text-white/30'}`}>
+              {qrEnabled ? 'Enabled' : 'Disabled'}
+            </span>
+          </label>
+        </div>
+
+        {!qrEnabled && (
+          <div className="p-3 rounded-xl bg-amber-500/5 border border-amber-500/15 text-xs text-amber-400/80 mb-4">
+            QR codes are hidden from student profiles. Enable after deploying to a public domain.
+          </div>
+        )}
+
+        <div className="flex items-center gap-3">
+          <button onClick={handleSaveQr} disabled={savingQr}
+            className="px-4 py-2.5 rounded-lg bg-[#F5C518] hover:bg-[#D5A711] text-black font-bold text-sm transition-all disabled:opacity-40 flex items-center gap-2">
+            {savingQr ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Save
+          </button>
+          {qrStatus && <span className="text-xs font-bold text-green-400">{qrStatus}</span>}
+        </div>
+      </div>
+
+      {/* Public Display Settings (#17) */}
+      <div className="hive-card !rounded-2xl">
+        <h3 className="text-sm font-bold text-white flex items-center gap-2 mb-4">
+          <Monitor size={16} className="text-[#F5C518]" />
+          Public Occupancy Display
+        </h3>
+        <p className="text-xs text-white/30 mb-4">Show a live occupancy screen on an external display for students waiting outside.</p>
+
+        <div className="flex items-center gap-4 mb-4">
+          <label className="flex items-center gap-3 cursor-pointer">
+            <div className={`relative w-12 h-6 rounded-full transition-all ${displayEnabled ? 'bg-[#F5C518]' : 'bg-white/10'}`}
+              onClick={() => setDisplayEnabled(!displayEnabled)}>
+              <div className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-all ${displayEnabled ? 'left-7' : 'left-1'}`} />
+            </div>
+            <span className={`text-sm font-bold ${displayEnabled ? 'text-[#F5C518]' : 'text-white/30'}`}>
+              {displayEnabled ? 'Active' : 'Disabled'}
+            </span>
+          </label>
+        </div>
+
+        {displayEnabled && (
+          <div className="space-y-3">
+            <div>
+              <label className="text-[10px] font-bold text-white/30 uppercase tracking-wider">Connection Type</label>
+              <select value={displayConnection} onChange={(e) => setDisplayConnection(e.target.value)}
+                className="w-full mt-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white focus:border-[#F5C518] outline-none"
+                style={{ colorScheme: 'dark' }}>
+                <option value="hdmi">HDMI / External Monitor</option>
+                <option value="browser">Browser Tab (open /display)</option>
+              </select>
+            </div>
+            <p className="text-[10px] text-white/20">
+              {displayConnection === 'hdmi'
+                ? 'Open localhost:3000/display in a fullscreen browser on the external monitor.'
+                : 'Navigate to /display in any browser tab to show the occupancy screen.'}
+            </p>
+          </div>
+        )}
+
+        <div className="flex items-center gap-3 mt-4">
+          <button onClick={handleSaveDisplay} disabled={savingDisplay}
+            className="px-4 py-2.5 rounded-lg bg-[#F5C518] hover:bg-[#D5A711] text-black font-bold text-sm transition-all disabled:opacity-40 flex items-center gap-2">
+            {savingDisplay ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Save
+          </button>
+          {displayStatus && <span className="text-xs font-bold text-green-400">{displayStatus}</span>}
         </div>
       </div>
 

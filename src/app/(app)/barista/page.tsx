@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Coffee, DollarSign, Image as ImageIcon, ShoppingCart, Trash2, XCircle, Upload, Loader2, Ban } from 'lucide-react'
+import { Plus, Coffee, DollarSign, Image as ImageIcon, ShoppingCart, Trash2, XCircle, Upload, Loader2, Ban, User, Search, X } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { PageTransition } from '@/components/animations/PageTransition'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
@@ -20,6 +20,12 @@ interface Order {
   totalPrice: number
   createdAt: string
   menuItem: MenuItem
+  student?: { id: number; fullName: string } | null
+}
+
+interface StudentOption {
+  id: number
+  fullName: string
 }
 
 export default function BaristaPage() {
@@ -101,14 +107,11 @@ export default function BaristaPage() {
     }
   }
 
-  const handleOrder = async (item: MenuItem) => {
+  const handleOrder = (item: MenuItem) => {
     if (item.isOutOfStock) return
-    await fetch('/api/barista/orders', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ menuItemId: item.id, quantity: 1, totalPrice: item.price })
-    })
-    loadData()
+    setOrderModal(item)
+    setSelectedStudent(null)
+    setStudentSearch('')
   }
 
   const handleToggleStock = async (item: MenuItem) => {
@@ -117,6 +120,47 @@ export default function BaristaPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ isOutOfStock: !item.isOutOfStock })
     })
+    loadData()
+  }
+
+  // Student linking for orders
+  const [orderModal, setOrderModal] = useState<MenuItem | null>(null)
+  const [studentSearch, setStudentSearch] = useState('')
+  const [studentResults, setStudentResults] = useState<StudentOption[]>([])
+  const [selectedStudent, setSelectedStudent] = useState<StudentOption | null>(null)
+  const [searchingStudents, setSearchingStudents] = useState(false)
+
+  useEffect(() => {
+    if (!studentSearch.trim() || studentSearch.length < 2) { setStudentResults([]); return }
+    const timer = setTimeout(async () => {
+      setSearchingStudents(true)
+      try {
+        const res = await fetch(`/api/students?search=${encodeURIComponent(studentSearch)}`)
+        if (res.ok) {
+          const students = await res.json()
+          setStudentResults(students.slice(0, 5).map((s: Record<string, unknown>) => ({ id: s.id as number, fullName: s.fullName as string })))
+        }
+      } catch { /* silent */ }
+      setSearchingStudents(false)
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [studentSearch])
+
+  const handleConfirmOrder = async () => {
+    if (!orderModal) return
+    await fetch('/api/barista/orders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        menuItemId: orderModal.id,
+        quantity: 1,
+        totalPrice: orderModal.price,
+        ...(selectedStudent ? { studentId: selectedStudent.id } : {}),
+      })
+    })
+    setOrderModal(null)
+    setSelectedStudent(null)
+    setStudentSearch('')
     loadData()
   }
 
@@ -311,14 +355,22 @@ export default function BaristaPage() {
             </div>
           </div>
 
-          <div className="hive-card !rounded-2xl h-64 overflow-y-auto">
-            <h2 className="text-lg font-bold mb-4 sticky top-0 z-10 pb-2 text-white" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>Recent Transactions</h2>
+          <div className="hive-card !rounded-2xl !overflow-visible">
+            <h2 className="text-lg font-bold mb-4 pb-2 text-white" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>Recent Transactions</h2>
+            <div className="max-h-80 overflow-y-auto pr-1" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
             <div className="divide-y divide-white/5">
               {orders.map(order => (
                 <div key={order.id} className="py-2 flex justify-between items-center text-sm group">
                   <div className="flex flex-col">
                     <span className="font-bold text-white/80">{order.menuItem.name} x{order.quantity}</span>
-                    <span className="text-xs text-white/25">{new Date(order.createdAt).toLocaleString()}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-white/25">{new Date(order.createdAt).toLocaleString()}</span>
+                      {order.student && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#F5C518]/10 text-[#F5C518] font-bold flex items-center gap-1">
+                          <User size={9} /> {order.student.fullName}
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <div className="flex items-center gap-3">
                     <div className="font-mono font-bold text-green-400">+{order.totalPrice.toFixed(2)} JD</div>
@@ -336,10 +388,101 @@ export default function BaristaPage() {
                 <div className="text-center text-white/25 text-sm py-4">No transactions yet.</div>
               )}
             </div>
+            </div>
           </div>
         </div>
       </div>
     </div>
+
+    {/* Order Confirm Modal with Student Link */}
+    <AnimatePresence>
+      {orderModal && (
+        <motion.div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+        >
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setOrderModal(null)} />
+          <motion.div
+            className="relative w-full max-w-sm rounded-2xl border border-white/10 p-6"
+            style={{ background: 'linear-gradient(135deg, #1A1A1A 0%, #0F0F0F 100%)' }}
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.9, opacity: 0 }}
+          >
+            <button onClick={() => setOrderModal(null)} className="absolute top-3 right-3 text-white/30 hover:text-white">
+              <X size={18} />
+            </button>
+            <h3 className="text-lg font-bold text-white mb-1">Confirm Order</h3>
+            <div className="flex items-center gap-3 mb-4 mt-3 p-3 rounded-xl bg-white/5">
+              <Coffee size={20} className="text-[#F5C518]" />
+              <div>
+                <p className="font-bold text-white text-sm">{orderModal.name}</p>
+                <p className="text-[#F5C518] font-black text-sm">{orderModal.price.toFixed(2)} JD</p>
+              </div>
+            </div>
+
+            {/* Student link (optional) */}
+            <div className="mb-4">
+              <label className="text-[10px] font-bold text-white/30 uppercase tracking-wider mb-2 block">
+                Link to Student (Optional)
+              </label>
+              {selectedStudent ? (
+                <div className="flex items-center justify-between p-2.5 rounded-lg bg-[#F5C518]/10 border border-[#F5C518]/20">
+                  <div className="flex items-center gap-2">
+                    <User size={14} className="text-[#F5C518]" />
+                    <span className="text-sm font-bold text-white">{selectedStudent.fullName}</span>
+                  </div>
+                  <button onClick={() => { setSelectedStudent(null); setStudentSearch('') }} className="text-white/40 hover:text-red-400">
+                    <X size={14} />
+                  </button>
+                </div>
+              ) : (
+                <div className="relative">
+                  <Search size={14} className="absolute left-3 top-3 text-white/20" />
+                  <input
+                    value={studentSearch}
+                    onChange={e => setStudentSearch(e.target.value)}
+                    placeholder="Search student by name..."
+                    className="w-full bg-white/5 border border-white/10 rounded-lg pl-9 pr-3 py-2.5 text-sm text-white placeholder-white/20 focus:border-[#F5C518] outline-none"
+                  />
+                  {searchingStudents && <Loader2 size={14} className="absolute right-3 top-3 text-white/30 animate-spin" />}
+                  {studentResults.length > 0 && (
+                    <div className="absolute left-0 right-0 top-full mt-1 rounded-lg border border-white/10 overflow-hidden z-10" style={{ background: '#1A1A1A' }}>
+                      {studentResults.map(s => (
+                        <button
+                          key={s.id}
+                          onClick={() => { setSelectedStudent(s); setStudentSearch(''); setStudentResults([]) }}
+                          className="w-full text-left px-3 py-2 text-sm text-white/70 hover:bg-white/10 hover:text-white flex items-center gap-2 transition-colors"
+                        >
+                          <User size={12} className="text-white/30" /> {s.fullName}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => setOrderModal(null)}
+                className="flex-1 py-2.5 rounded-lg border border-white/10 text-white/50 hover:text-white text-sm font-bold transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmOrder}
+                className="flex-1 py-2.5 rounded-lg bg-[#F5C518] hover:bg-[#D5A711] text-black text-sm font-bold transition-all"
+              >
+                Place Order
+              </button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
 
     <ConfirmModal
       open={confirmOpen}

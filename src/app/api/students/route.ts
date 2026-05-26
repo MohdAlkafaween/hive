@@ -4,13 +4,20 @@ import prisma from '@/lib/prisma'
 import { requireAuth } from '@/lib/authGuard'
 import { sanitizeString, sanitizePhone, sanitizeRfid } from '@/lib/sanitize'
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    const session = await requireAuth('ADMIN', 'REGISTERATION_COUNTER')
+    const session = await requireAuth('ADMIN', 'REGISTERATION_COUNTER', 'BARISTA')
     if (session instanceof Response) return session
 
+    const search = req.nextUrl.searchParams.get('search')?.trim()
+    const where = search
+      ? { fullName: { contains: search } }
+      : {}
+
     const students = await prisma.student.findMany({
+      where,
       orderBy: { createdAt: 'desc' },
+      ...(search ? { take: 10 } : {}),
       include: {
         subscriptions: { where: { isActive: true }, orderBy: { createdAt: 'desc' }, take: 1 },
       },

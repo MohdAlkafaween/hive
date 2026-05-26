@@ -1,10 +1,26 @@
 ﻿'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { ArrowLeft, CreditCard, RefreshCw, Loader2, User, Phone, BookOpen, Activity, Calendar, Hash, CheckCircle, XCircle, Trash2, AlertTriangle, Edit3, Save, Plus, Minus, Camera, Snowflake, QrCode, StickyNote, Send, X } from 'lucide-react'
+import { ArrowLeft, CreditCard, RefreshCw, Loader2, User, Phone, BookOpen, Activity, Calendar, Hash, CheckCircle, XCircle, Trash2, AlertTriangle, Edit3, Save, Plus, Minus, Camera, Snowflake, QrCode, StickyNote, Send, X, Coffee } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { RenewModal } from './RenewModal'
 import { ReceiptModal, type ReceiptData } from '@/components/dashboard/ReceiptModal'
+
+// QR code canvas component using the qrcode library
+function QrCanvas({ value, size = 192 }: { value: string; size?: number }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  useEffect(() => {
+    if (!value || !canvasRef.current) return
+    import('qrcode').then(QRCode => {
+      QRCode.toCanvas(canvasRef.current, value, {
+        width: size,
+        margin: 2,
+        color: { dark: '#000000', light: '#FFFFFF' },
+      })
+    }).catch(() => {})
+  }, [value, size])
+  return <canvas ref={canvasRef} />
+}
 
 interface Student {
   id: number
@@ -28,6 +44,7 @@ interface Subscription {
 interface Log { id: number; checkInTime: string; checkOutTime?: string; date: string }
 interface Transaction { id: number; amountPaid: number; planType: string; gateway: string; discountAmount: number; createdAt: string }
 interface Note { id: number; content: string; authorName: string; createdAt: string }
+interface BaristaOrderItem { id: number; quantity: number; totalPrice: number; createdAt: string; menuItem: { name: string; price: number } }
 
 interface ProfileViewProps {
   studentId: number
@@ -64,6 +81,17 @@ export function ProfileView({ studentId, onBack }: ProfileViewProps) {
 
   // QR modal state
   const [qrOpen, setQrOpen] = useState(false)
+  const [qrEnabled, setQrEnabled] = useState(false)
+
+  // Barista orders state
+  const [baristaOrders, setBaristaOrders] = useState<BaristaOrderItem[]>([])
+
+  // Edit profile state
+  const [editingProfile, setEditingProfile] = useState(false)
+  const [editName, setEditName] = useState('')
+  const [editPhone, setEditPhone] = useState('')
+  const [editMajor, setEditMajor] = useState('')
+  const [savingProfile, setSavingProfile] = useState(false)
 
   const fetchStudent = useCallback(async () => {
     setLoading(true)
@@ -163,6 +191,22 @@ export function ProfileView({ studentId, onBack }: ProfileViewProps) {
       .catch(() => {})
   }, [studentId])
 
+  // Check if QR codes are enabled
+  useEffect(() => {
+    fetch('/api/settings')
+      .then(r => r.ok ? r.json() : {})
+      .then((s: Record<string, string>) => setQrEnabled(s.qrEnabled === 'true'))
+      .catch(() => {})
+  }, [])
+
+  // Fetch barista orders linked to this student
+  useEffect(() => {
+    fetch(`/api/students/${studentId}/orders`)
+      .then(r => r.ok ? r.json() : [])
+      .then(setBaristaOrders)
+      .catch(() => {})
+  }, [studentId])
+
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -216,6 +260,31 @@ export function ProfileView({ studentId, onBack }: ProfileViewProps) {
     if (res.ok) setNotes(prev => prev.filter(n => n.id !== noteId))
   }
 
+  const handleStartEdit = () => {
+    if (!student) return
+    setEditName(student.fullName)
+    setEditPhone(student.phone)
+    setEditMajor(student.major || '')
+    setEditingProfile(true)
+  }
+
+  const handleSaveProfile = async () => {
+    setSavingProfile(true)
+    try {
+      const res = await fetch(`/api/students/${studentId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fullName: editName, phone: editPhone, major: editMajor || null }),
+      })
+      if (res.ok) {
+        setEditingProfile(false)
+        fetchStudent()
+      }
+    } finally {
+      setSavingProfile(false)
+    }
+  }
+
   if (loading) return (
     <div className="flex flex-col items-center justify-center h-full gap-4">
       <Loader2 size={32} className="animate-spin text-[#F5C518]" />
@@ -237,7 +306,12 @@ export function ProfileView({ studentId, onBack }: ProfileViewProps) {
             <ArrowLeft size={20} />
           </button>
           <div className="flex items-center gap-3">
-            <h1 className="text-3xl font-black text-white tracking-tight">{student.fullName}</h1>
+            {editingProfile ? (
+              <input value={editName} onChange={(e) => setEditName(e.target.value)}
+                className="text-3xl font-black text-white tracking-tight bg-transparent border-b-2 border-[#F5C518] outline-none w-64" autoFocus />
+            ) : (
+              <h1 className="text-3xl font-black text-white tracking-tight">{student.fullName}</h1>
+            )}
             {activeSub ? (
               <span className="px-3 py-1 bg-green-500/10 text-green-400 border border-green-500/20 rounded-md text-[11px] font-bold uppercase tracking-widest flex items-center gap-1.5">
                 <CheckCircle size={12} className="text-green-400" /> Active
@@ -249,13 +323,31 @@ export function ProfileView({ studentId, onBack }: ProfileViewProps) {
             )}
           </div>
         </div>
-        <button
-          onClick={() => { setDeleteOpen(true); setDeleteError('') }}
-          className="flex items-center gap-2 px-4 py-2.5 bg-red-500/10 border border-red-500/20 text-red-400 rounded-xl text-sm font-bold hover:bg-red-500/20 hover:border-red-500/30 transition-all"
-        >
-          <Trash2 size={16} />
-          Delete Student
-        </button>
+        <div className="flex items-center gap-2">
+          {editingProfile ? (
+            <>
+              <button onClick={() => setEditingProfile(false)}
+                className="flex items-center gap-2 px-4 py-2.5 bg-white/5 border border-white/10 text-white/50 rounded-xl text-sm font-bold hover:bg-white/10 transition-all">
+                <X size={16} /> Cancel
+              </button>
+              <button onClick={handleSaveProfile} disabled={savingProfile}
+                className="flex items-center gap-2 px-4 py-2.5 bg-[#F5C518] text-black rounded-xl text-sm font-bold hover:bg-[#D5A711] transition-all disabled:opacity-40">
+                {savingProfile ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} Save
+              </button>
+            </>
+          ) : (
+            <>
+              <button onClick={handleStartEdit}
+                className="flex items-center gap-2 px-4 py-2.5 bg-white/5 border border-white/10 text-white/50 rounded-xl text-sm font-bold hover:bg-white/10 hover:text-white transition-all">
+                <Edit3 size={16} /> Edit
+              </button>
+              <button onClick={() => { setDeleteOpen(true); setDeleteError('') }}
+                className="flex items-center gap-2 px-4 py-2.5 bg-red-500/10 border border-red-500/20 text-red-400 rounded-xl text-sm font-bold hover:bg-red-500/20 hover:border-red-500/30 transition-all">
+                <Trash2 size={16} /> Delete
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -292,8 +384,25 @@ export function ProfileView({ studentId, onBack }: ProfileViewProps) {
               </div>
             </div>
 
-            <InfoRow icon={<Phone size={14} />} label="Phone" value={student.phone} />
-            {student.major && <InfoRow icon={<BookOpen size={14} />} label="Major" value={student.major} />}
+            {editingProfile ? (
+              <div className="space-y-3">
+                <div>
+                  <label className="text-[10px] font-bold text-white/30 uppercase tracking-wider">Phone</label>
+                  <input value={editPhone} onChange={(e) => setEditPhone(e.target.value)}
+                    className="w-full mt-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-[#F5C518] outline-none" />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-white/30 uppercase tracking-wider">Major</label>
+                  <input value={editMajor} onChange={(e) => setEditMajor(e.target.value)} placeholder="Optional"
+                    className="w-full mt-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-[#F5C518] outline-none placeholder:text-white/20" />
+                </div>
+              </div>
+            ) : (
+              <>
+                <InfoRow icon={<Phone size={14} />} label="Phone" value={student.phone} />
+                {student.major && <InfoRow icon={<BookOpen size={14} />} label="Major" value={student.major} />}
+              </>
+            )}
             <InfoRow icon={<Activity size={14} />} label="Lifetime Check-Ins" value={student.lifetimeCheckIns.toString()} accent />
             <InfoRow icon={<CreditCard size={14} />} label="RFID" value={student.rfidUuid ?? 'Not Linked'} />
 
@@ -429,10 +538,50 @@ export function ProfileView({ studentId, onBack }: ProfileViewProps) {
 
         {/* Recent logs */}
         <div className="border border-white/8 rounded-2xl p-6 flex flex-col" style={{ background: 'rgba(255,255,255,0.04)' }}>
-          <h2 className="text-[11px] font-bold text-white/40 uppercase tracking-widest mb-5 flex items-center gap-2">
+          <h2 className="text-[11px] font-bold text-white/40 uppercase tracking-widest mb-4 flex items-center gap-2">
             <Hash size={14} className="text-[#F5C518]" />
             Recent Check-Ins
           </h2>
+
+          {/* Visit frequency — last 4 weeks */}
+          {student.logs.length > 0 && (() => {
+            const weeks: number[] = [0, 0, 0, 0]
+            const now = Date.now()
+            student.logs.forEach(l => {
+              const age = Math.floor((now - new Date(l.checkInTime).getTime()) / (7 * 86400000))
+              if (age < 4) weeks[age]++
+            })
+            const max = Math.max(...weeks, 1)
+            return (
+              <div className="flex items-end gap-1.5 h-10 mb-4 px-1">
+                {[...weeks].reverse().map((count, i) => (
+                  <div key={i} className="flex-1 flex flex-col items-center gap-0.5">
+                    <div className="w-full rounded-sm transition-all" style={{
+                      height: `${Math.max(4, (count / max) * 32)}px`,
+                      background: count > 0 ? 'rgba(245, 197, 24, 0.5)' : 'rgba(255,255,255,0.05)',
+                    }} />
+                    <span className="text-[8px] text-white/20 font-bold">{i === 3 ? 'This' : `${3 - i}w`}</span>
+                  </div>
+                ))}
+              </div>
+            )
+          })()}
+
+          {/* Session Duration Average */}
+          {(() => {
+            const sessions = student.logs.filter(l => l.checkOutTime)
+            if (sessions.length === 0) return null
+            const avgMs = sessions.reduce((s, l) => s + (new Date(l.checkOutTime!).getTime() - new Date(l.checkInTime).getTime()), 0) / sessions.length
+            const avgH = Math.floor(avgMs / 3600000)
+            const avgM = Math.floor((avgMs % 3600000) / 60000)
+            return (
+              <div className="flex items-center gap-2 mb-3 px-1">
+                <Activity size={12} className="text-white/20" />
+                <span className="text-[10px] text-white/25 font-bold">Avg session: <span className="text-white/50">{avgH}h {avgM}m</span></span>
+              </div>
+            )
+          })()}
+
           <div className="space-y-2 flex-1 overflow-auto pr-2 custom-scrollbar">
             {student.logs.slice(0, 15).map((log) => (
               <div key={log.id} className="flex justify-between items-center p-3 rounded-lg bg-white/3 hover:bg-white/5 transition-colors border border-white/8 text-sm">
@@ -447,8 +596,8 @@ export function ProfileView({ studentId, onBack }: ProfileViewProps) {
             )}
           </div>
 
-          {/* QR Code Button */}
-          {student.qrToken && (
+          {/* QR Code Button — only shown when QR is enabled in admin settings */}
+          {qrEnabled && student.qrToken && (
             <button
               onClick={() => setQrOpen(true)}
               className="mt-4 w-full py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 bg-purple-500/10 border border-purple-500/20 text-purple-400 hover:bg-purple-500/20 transition-all"
@@ -505,6 +654,39 @@ export function ProfileView({ studentId, onBack }: ProfileViewProps) {
           )}
         </div>
       </div>
+
+      {/* Barista Purchase History */}
+      {baristaOrders.length > 0 && (
+        <div className="border border-white/8 rounded-2xl p-6" style={{ background: 'rgba(255,255,255,0.04)' }}>
+          <div className="flex items-center justify-between mb-5">
+            <h2 className="text-[11px] font-bold text-white/40 uppercase tracking-widest flex items-center gap-2">
+              <Coffee size={14} className="text-[#F5C518]" />
+              Barista Purchases
+            </h2>
+            <span className="text-[10px] font-bold text-white/25 px-2 py-1 rounded-md bg-white/5 border border-white/8">
+              {baristaOrders.length} orders · {baristaOrders.reduce((s, o) => s + o.totalPrice, 0).toFixed(2)} JD total
+            </span>
+          </div>
+          <div className="space-y-1.5 max-h-[220px] overflow-auto pr-2" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.1) transparent' }}>
+            {baristaOrders.map((order) => (
+              <div key={order.id} className="flex items-center justify-between py-2.5 px-3 rounded-xl bg-white/3 border border-white/6 hover:bg-white/5 transition-colors">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-[#F5C518]/10">
+                    <Coffee size={14} className="text-[#F5C518]" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-white/80">{order.menuItem.name}{order.quantity > 1 ? ` x${order.quantity}` : ''}</p>
+                    <p className="text-[10px] text-white/25">
+                      {new Date(order.createdAt).toLocaleDateString('en-JO', { month: 'short', day: 'numeric' })} at {new Date(order.createdAt).toLocaleTimeString('en-JO', { hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                  </div>
+                </div>
+                <span className="text-sm font-black text-[#F5C518]">{order.totalPrice.toFixed(2)} JD</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Subscription history */}
       <div className="border border-white/8 rounded-2xl p-6 mt-2" style={{ background: 'rgba(255,255,255,0.04)' }}>
@@ -610,11 +792,7 @@ export function ProfileView({ studentId, onBack }: ProfileViewProps) {
       <Modal open={qrOpen} onClose={() => setQrOpen(false)} title="QR Code" maxWidth="max-w-sm">
         <div className="flex flex-col items-center gap-4 py-4">
           <div className="p-4 bg-white rounded-2xl">
-            <img
-              src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(student?.qrToken || '')}`}
-              alt="QR Code"
-              className="w-48 h-48"
-            />
+            <QrCanvas value={student?.qrToken || ''} size={192} />
           </div>
           <div className="text-center">
             <p className="text-sm font-bold text-white">{student?.fullName}</p>

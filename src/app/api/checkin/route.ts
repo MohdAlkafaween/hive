@@ -4,6 +4,7 @@ import { isSubscriptionActive, todayString } from '@/lib/subscriptionLogic'
 import { isValidId, sanitizeRfid } from '@/lib/sanitize'
 import { checkRateLimit, getClientIp } from '@/lib/rateLimit'
 import { getCapacityInfo } from '@/lib/capacity'
+import { autoExpireSubscriptions } from '@/lib/autoExpire'
 
 // Check-in is public (kiosk mode) but rate-limited
 export async function POST(req: NextRequest) {
@@ -14,6 +15,9 @@ export async function POST(req: NextRequest) {
     if (limit.limited) {
       return Response.json({ error: 'Too many requests' }, { status: 429 })
     }
+
+    // Auto-expire stale subscriptions before processing
+    await autoExpireSubscriptions().catch(() => {})
 
     const body = await req.json().catch(() => null)
     if (!body) return Response.json({ error: 'Invalid request body' }, { status: 400 })

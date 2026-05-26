@@ -9,6 +9,7 @@ import {
 import { PageTransition } from '@/components/animations/PageTransition'
 import { AnimatedTabs } from '@/components/animations/AnimatedTabs'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
+import { ExportButton } from '@/components/shared/ExportButton'
 
 type LogTab = 'checkins' | 'barista'
 
@@ -404,14 +405,30 @@ export default function LogsPage() {
                       }
                     </p>
                   </div>
-                  <div className="relative">
-                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/25" />
-                    <input
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder={tab === 'checkins' ? 'Search student...' : 'Search item...'}
-                      className="pl-8 pr-3 py-2 text-sm bg-white/5 border border-white/10 rounded-lg focus:border-[#F5C518] focus:outline-none focus:shadow-[0_0_0_3px_rgba(245,197,24,0.12)] w-48 text-white placeholder-white/20 transition-all"
-                    />
+                  <div className="flex items-center gap-2">
+                    <div className="relative">
+                      <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/25" />
+                      <input
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        placeholder={tab === 'checkins' ? 'Search student...' : 'Search item...'}
+                        className="pl-8 pr-3 py-2 text-sm bg-white/5 border border-white/10 rounded-lg focus:border-[#F5C518] focus:outline-none focus:shadow-[0_0_0_3px_rgba(245,197,24,0.12)] w-48 text-white placeholder-white/20 transition-all"
+                      />
+                    </div>
+                    {tab === 'checkins' && selectedDate && (
+                      <ExportButton
+                        label="Excel"
+                        fileName={`hive-logs-${selectedDate}`}
+                        sheetName="Check-In Logs"
+                        fetchData={async () => checkInLogs.map(l => ({
+                          Name: l.student?.fullName || l.studentName || 'Deleted',
+                          Phone: l.student?.phone || '',
+                          'Check-In': new Date(l.checkInTime).toLocaleTimeString('en-JO', { hour: '2-digit', minute: '2-digit' }),
+                          'Check-Out': l.checkOutTime ? new Date(l.checkOutTime).toLocaleTimeString('en-JO', { hour: '2-digit', minute: '2-digit' }) : 'N/A',
+                          Date: l.date,
+                        }))}
+                      />
+                    )}
                   </div>
                 </div>
               </div>

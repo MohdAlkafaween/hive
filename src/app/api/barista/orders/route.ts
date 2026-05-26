@@ -9,7 +9,7 @@ export async function GET() {
     if (session instanceof Response) return session
 
     const orders = await prisma.baristaOrder.findMany({
-      include: { menuItem: true },
+      include: { menuItem: true, student: { select: { id: true, fullName: true } } },
       orderBy: { createdAt: 'desc' }
     })
     return NextResponse.json(orders)
@@ -26,7 +26,7 @@ export async function POST(req: Request) {
     const body = await req.json().catch(() => null)
     if (!body) return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
 
-    const { menuItemId, quantity, totalPrice } = body
+    const { menuItemId, quantity, totalPrice, studentId } = body
 
     if (!menuItemId || !isValidId(menuItemId)) {
       return NextResponse.json({ error: 'Valid menu item ID required' }, { status: 400 })
@@ -48,13 +48,24 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Menu item not found' }, { status: 404 })
     }
 
+    // Validate optional studentId
+    let linkedStudentId: number | undefined = undefined
+    if (studentId) {
+      const sid = parseInt(String(studentId))
+      if (!isNaN(sid) && sid > 0) {
+        const student = await prisma.student.findUnique({ where: { id: sid } })
+        if (student) linkedStudentId = sid
+      }
+    }
+
     const order = await prisma.baristaOrder.create({
       data: {
         menuItemId: menuItem.id,
         quantity: qty,
-        totalPrice: price
+        totalPrice: price,
+        ...(linkedStudentId ? { studentId: linkedStudentId } : {}),
       },
-      include: { menuItem: true }
+      include: { menuItem: true, student: { select: { id: true, fullName: true } } }
     })
     return NextResponse.json(order)
   } catch {

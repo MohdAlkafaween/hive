@@ -2,11 +2,15 @@ import { NextRequest } from 'next/server'
 import prisma from '@/lib/prisma'
 import { requireAuth } from '@/lib/authGuard'
 import { isValidDateString } from '@/lib/sanitize'
+import { autoExpireSubscriptions } from '@/lib/autoExpire'
 
 export async function GET(req: NextRequest) {
   try {
     const session = await requireAuth('ADMIN', 'REGISTERATION_COUNTER')
     if (session instanceof Response) return session
+
+    // Auto-expire stale subscriptions on dashboard load
+    await autoExpireSubscriptions().catch(() => {})
 
     const dateParam = req.nextUrl.searchParams.get('date')
     const today = (dateParam && isValidDateString(dateParam)) ? dateParam : new Date().toISOString().slice(0, 10)

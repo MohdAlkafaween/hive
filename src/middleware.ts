@@ -34,7 +34,9 @@ export async function middleware(request: NextRequest) {
     path.startsWith('/api/auth/seed') ||
     path.startsWith('/api/auth/me') ||
     path.startsWith('/api/checkin') ||
-    path.startsWith('/api/rfid')
+    path.startsWith('/api/rfid') ||
+    path === '/display' ||
+    path.startsWith('/api/display')
 
   if (isPublicPath) {
     const response = NextResponse.next()

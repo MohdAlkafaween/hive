@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Loader2, Ticket, CheckCircle2, XCircle } from 'lucide-react'
@@ -8,6 +8,8 @@ import type { ReceiptData } from '@/components/dashboard/ReceiptModal'
 
 const PLANS: PlanType[] = ['Daily', 'Weekly', 'Monthly']
 const GATEWAYS = ['Cash', 'CliQ', 'eFAWATEERcom', 'Credit Card']
+
+type PlanConfig = Record<PlanType, { price: number; totalVisitsAllowed: number; durationDays: number }>
 
 interface RenewModalProps {
   open: boolean
@@ -18,6 +20,7 @@ interface RenewModalProps {
 }
 
 export function RenewModal({ open, onClose, studentId, studentName, onRenewed }: RenewModalProps) {
+  const [planConfig, setPlanConfig] = useState<PlanConfig>(PLAN_DEFAULTS)
   const [plan, setPlan]         = useState<PlanType>('Monthly')
   const [gateway, setGateway]   = useState('Cash')
   const [amountPaid, setAmount] = useState(PLAN_DEFAULTS.Monthly.price)
@@ -25,13 +28,35 @@ export function RenewModal({ open, onClose, studentId, studentName, onRenewed }:
   const [saving, setSaving]     = useState(false)
   const [error, setError]       = useState('')
 
+  // Load plan pricing from settings
+  useEffect(() => {
+    if (!open) return
+    fetch('/api/settings')
+      .then(r => r.ok ? r.json() : null)
+      .then((settings: Record<string, string> | null) => {
+        if (!settings) return
+        const config = { ...PLAN_DEFAULTS }
+        for (const p of PLANS) {
+          const priceKey = `plan_${p}_price`
+          const visitsKey = `plan_${p}_visits`
+          const daysKey = `plan_${p}_days`
+          if (settings[priceKey]) config[p] = { ...config[p], price: parseFloat(settings[priceKey]) }
+          if (settings[visitsKey]) config[p] = { ...config[p], totalVisitsAllowed: parseInt(settings[visitsKey]) }
+          if (settings[daysKey]) config[p] = { ...config[p], durationDays: parseInt(settings[daysKey]) }
+        }
+        setPlanConfig(config)
+        setAmount(config[plan].price)
+      })
+      .catch(() => {})
+  }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // Promo code state
   const [promoInput, setPromoInput] = useState('')
   const [promoLoading, setPromoLoading] = useState(false)
   const [promoApplied, setPromoApplied] = useState<{ code: string; discountType: string; discountAmount: number; bonusEntries: number; id: number } | null>(null)
   const [promoError, setPromoError] = useState('')
 
-  const defaults = PLAN_DEFAULTS[plan]
+  const defaults = planConfig[plan]
   const promoDiscount = promoApplied
     ? promoApplied.discountType === 'PERCENTAGE'
       ? Math.round(amountPaid * promoApplied.discountAmount) / 100
@@ -45,7 +70,7 @@ export function RenewModal({ open, onClose, studentId, studentName, onRenewed }:
 
   const handlePlanChange = (p: PlanType) => {
     setPlan(p)
-    setAmount(PLAN_DEFAULTS[p].price)
+    setAmount(planConfig[p].price)
   }
 
   const handleApplyPromo = async () => {
@@ -103,7 +128,7 @@ export function RenewModal({ open, onClose, studentId, studentName, onRenewed }:
 
         // If promo gives bonus entries, add them to the newly created subscription
         if (promoBonusEntries > 0 && subData.subscription?.id) {
-          const currentVisits = defaults.totalVisitsAllowed
+          const currentVisits = planConfig[plan].totalVisitsAllowed
           fetch(`/api/subscriptions/${subData.subscription.id}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
@@ -113,9 +138,7 @@ export function RenewModal({ open, onClose, studentId, studentName, onRenewed }:
       }
 
       const expiry = new Date(startDate)
-      if (plan === 'Daily') expiry.setDate(expiry.getDate() + 1)
-      else if (plan === 'Weekly') expiry.setDate(expiry.getDate() + 10)
-      else expiry.setDate(expiry.getDate() + 40)
+      expiry.setDate(expiry.getDate() + planConfig[plan].durationDays)
 
       onRenewed({
         studentName,
@@ -146,10 +169,10 @@ export function RenewModal({ open, onClose, studentId, studentName, onRenewed }:
                     ? 'border-[#F5C518] bg-[rgba(245,197,24,0.1)] text-[#F5C518] shadow-[0_0_20px_rgba(245,197,24,0.1)] scale-[1.02]'
                     : 'border-white/10 bg-white/5 text-white/40 hover:border-white/20 hover:bg-white/8'}`}
               >
-                <span className={`font-black text-2xl ${plan === p ? 'text-[#F5C518]' : 'text-white/80'}`}>{PLAN_DEFAULTS[p].price} <span className="text-sm font-medium">JD</span></span>
+                <span className={`font-black text-2xl ${plan === p ? 'text-[#F5C518]' : 'text-white/80'}`}>{planConfig[p].price} <span className="text-sm font-medium">JD</span></span>
                 <span className="text-sm font-semibold mt-1">{p}</span>
                 <span className="text-[10px] opacity-60 mt-1.5 text-center leading-tight">
-                  {p === 'Daily' ? '1 day' : p === 'Weekly' ? '7 days / 10 calendar' : '30 days / 40 calendar'}
+                  {planConfig[p].totalVisitsAllowed >= 999 ? 'Unlimited' : `${planConfig[p].totalVisitsAllowed} visits`} / {planConfig[p].durationDays} days
                 </span>
               </button>
             ))}

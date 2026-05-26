@@ -9,8 +9,17 @@ export async function GET(req: NextRequest) {
     if (session instanceof Response) return session
 
     const { searchParams } = new URL(req.url)
-    const year = Number(searchParams.get('year')) || new Date().getFullYear()
-    const month = Number(searchParams.get('month')) || new Date().getMonth() + 1
+    // Support both ?month=2026-05 (YYYY-MM) and ?year=2026&month=5
+    const monthParam = searchParams.get('month') || ''
+    let year: number, month: number
+    if (monthParam.includes('-')) {
+      const [y, m] = monthParam.split('-')
+      year = Number(y) || new Date().getFullYear()
+      month = Number(m) || new Date().getMonth() + 1
+    } else {
+      year = Number(searchParams.get('year')) || new Date().getFullYear()
+      month = Number(monthParam) || new Date().getMonth() + 1
+    }
 
     const startDate = new Date(year, month - 1, 1)
     const endDate = new Date(year, month, 0, 23, 59, 59)
@@ -69,15 +78,22 @@ export async function GET(req: NextRequest) {
       where: { createdAt: { gte: startDate, lte: endDate } },
     })
 
+    // New subscriptions this month
+    const newSubscriptions = await prisma.subscription.count({
+      where: { createdAt: { gte: startDate, lte: endDate } },
+    })
+
     // Staff shifts this month
     const shifts = await prisma.staffShift.findMany({
       where: { date: { gte: startDate.toISOString().slice(0, 10), lte: endDate.toISOString().slice(0, 10) } },
     })
-    const staffHours: Record<string, number> = {}
+    const staffHoursByEmail: Record<string, number> = {}
+    let totalStaffHours = 0
     for (const s of shifts) {
       if (s.clockOut) {
         const hours = (new Date(s.clockOut).getTime() - new Date(s.clockIn).getTime()) / (1000 * 60 * 60)
-        staffHours[s.email] = (staffHours[s.email] || 0) + hours
+        staffHoursByEmail[s.email] = (staffHoursByEmail[s.email] || 0) + hours
+        totalStaffHours += hours
       }
     }
 
@@ -91,11 +107,13 @@ export async function GET(req: NextRequest) {
       uniqueStudents,
       activeSubsCount,
       newStudents,
+      newSubscriptions,
       revenueByGateway,
       revenueByPlan,
       dailyRevenue,
       dailyCheckIns,
-      staffHours,
+      staffHours: totalStaffHours,
+      staffHoursByEmail,
     })
   } catch (e) {
     console.error('[GET /api/reports]', e)

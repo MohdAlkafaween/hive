@@ -57,6 +57,7 @@ model Student {
   promoUsages      PromoUsage[]
   notes            StudentNote[]
   waitlistEntries  WaitlistEntry[]
+  baristaOrders    BaristaOrder[]
 }
 
 model Subscription {
@@ -112,6 +113,8 @@ model BaristaOrder {
   id          Int       @id @default(autoincrement())
   menuItemId  Int
   menuItem    MenuItem  @relation(fields: [menuItemId], references: [id])
+  studentId   Int?
+  student     Student?  @relation(fields: [studentId], references: [id], onDelete: SetNull)
   quantity    Int       @default(1)
   totalPrice  Float
   createdAt   DateTime  @default(now())
