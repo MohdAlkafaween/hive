@@ -71,7 +71,7 @@ export default function LoginPage() {
               transition={{ delay: 0.3, duration: 0.5, type: 'spring', stiffness: 200 }}
               whileHover={{ scale: 1.1 }}
             >
-              <img src="/logo.png" alt="HIVE" className="w-20 h-20 object-contain drop-shadow-[0_0_16px_rgba(245,197,24,0.3)]" onError={(e) => { e.currentTarget.style.display = 'none' }} />
+              <img src="/logo.png" alt="HIVE" width={80} height={80} className="w-20 h-20 object-contain drop-shadow-[0_0_16px_rgba(245,197,24,0.3)]" />
             </motion.div>
             <span className="text-3xl font-black tracking-tight text-white">HIVE<span className="hive-gradient-text">.</span></span>
           </div>
