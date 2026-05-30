@@ -81,12 +81,12 @@ export default function DashboardPage() {
     setSubInfo(null)
 
     try {
-      const res = await fetch(`/api/checkin/search?q=${encodeURIComponent(student.phone)}`)
+      const res = await fetch(`/api/students/${student.id}`)
       if (res.ok) {
         const data = await res.json()
-        const match = data.find((s: any) => s.id === student.id)
-        if (match?.subscriptions?.length > 0) {
-          setSubInfo(match.subscriptions[0])
+        const activeSub = data.subscriptions?.find((s: any) => s.isActive)
+        if (activeSub) {
+          setSubInfo(activeSub)
         } else {
           setSubInfo(null)
         }
