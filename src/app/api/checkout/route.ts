@@ -5,7 +5,7 @@ import { isValidId } from '@/lib/sanitize'
 
 export async function POST(req: NextRequest) {
   try {
-    const session = await requireAuth('ADMIN', 'REGISTERATION_COUNTER')
+    const session = await requireAuth('ADMIN', 'STAFF')
     if (session instanceof Response) return session
 
     const body = await req.json().catch(() => null)
@@ -13,6 +13,13 @@ export async function POST(req: NextRequest) {
 
     const { logId } = body
     if (!logId || !isValidId(logId)) return Response.json({ error: 'Valid logId required' }, { status: 400 })
+
+    // Prevent double checkout — only update if not already checked out
+    const existing = await prisma.log.findUnique({ where: { id: Number(logId) } })
+    if (!existing) return Response.json({ error: 'Log entry not found' }, { status: 404 })
+    if (existing.checkOutTime) {
+      return Response.json({ error: 'Student already checked out' }, { status: 400 })
+    }
 
     const log = await prisma.log.update({
       where: { id: Number(logId) },

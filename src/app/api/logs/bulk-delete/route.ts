@@ -27,6 +27,17 @@ export async function DELETE(req: NextRequest) {
       },
     })
 
+    // Audit trail for bulk deletions
+    await prisma.staffAuditLog.create({
+      data: {
+        userId: session.userId as number,
+        email: session.email as string,
+        role: session.role as string,
+        event: 'BULK_LOG_DELETE',
+        details: `Deleted ${result.count} logs from ${fromDate} to ${toDate}`,
+      },
+    }).catch(() => {}) // Don't fail the response if audit logging fails
+
     return Response.json({ deleted: result.count })
   } catch (e) {
     console.error('[DELETE /api/logs/bulk-delete]', e)

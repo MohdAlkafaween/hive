@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { verifyAuth } from '@/lib/auth'
 import { auditLog } from '@/lib/auditLog'
 import prisma from '@/lib/prisma'
+import { todayString } from '@/lib/subscriptionLogic'
 
 export async function POST() {
   // Log who is logging out (best effort — don't block on failure)
@@ -25,7 +26,7 @@ export async function POST() {
 
       // Auto clock-out on logout
       try {
-        const today = new Date().toISOString().slice(0, 10)
+        const today = todayString()
         const openShift = await prisma.staffShift.findFirst({
           where: { userId: session.userId as number, date: today, clockOut: null },
         })

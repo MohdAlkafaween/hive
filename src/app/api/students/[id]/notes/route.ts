@@ -6,7 +6,7 @@ import { isValidId, sanitizeString } from '@/lib/sanitize'
 // GET notes for a student
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const session = await requireAuth('ADMIN', 'MANAGER', 'REGISTERATION_COUNTER')
+    const session = await requireAuth('ADMIN', 'MANAGER', 'STAFF')
     if (session instanceof Response) return session
     const { id } = await params
     if (!isValidId(id)) return Response.json({ error: 'Invalid student ID' }, { status: 400 })
@@ -25,7 +25,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 // POST — add a note
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const session = await requireAuth('ADMIN', 'MANAGER', 'REGISTERATION_COUNTER')
+    const session = await requireAuth('ADMIN', 'MANAGER', 'STAFF')
     if (session instanceof Response) return session
     const { id } = await params
     if (!isValidId(id)) return Response.json({ error: 'Invalid student ID' }, { status: 400 })

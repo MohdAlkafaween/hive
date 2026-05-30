@@ -6,7 +6,7 @@ import { sanitizeString } from '@/lib/sanitize'
 // Validate a promo code — requires auth (staff use only)
 export async function POST(req: NextRequest) {
   try {
-    const session = await requireAuth('ADMIN', 'REGISTERATION_COUNTER')
+    const session = await requireAuth('ADMIN', 'STAFF')
     if (session instanceof Response) return session
 
     const body = await req.json().catch(() => null)

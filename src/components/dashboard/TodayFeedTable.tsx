@@ -1,15 +1,21 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { LogOut, RefreshCw, Clock, AlertTriangle, CalendarDays, EyeOff } from 'lucide-react'
+import { todayString } from '@/lib/subscriptionLogic'
+import { LogOut, RefreshCw, Clock, AlertTriangle, CalendarDays, EyeOff, UserX, Loader2, Smartphone, User } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
+import { useI18n } from '@/lib/i18n'
+import { useToast } from '@/components/ui/Toast'
 
 interface LogEntry {
   id: number
   checkInTime: string
   checkOutTime?: string
   studentName: string
+  method?: string
+  processedBy?: number | null
+  processedByUser?: { name: string; email: string } | null
   student: {
     id: number;
     fullName: string;
@@ -26,23 +32,43 @@ interface TodayFeedTableProps {
 
 export function TodayFeedTable({ refreshTrigger, onLogsFetched, userRole }: TodayFeedTableProps) {
   const router = useRouter()
+  const { t } = useI18n()
+  const { toast } = useToast()
   const [logs, setLogs] = useState<LogEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [checkingOut, setCheckingOut] = useState<number | null>(null)
   const [confirmId, setConfirmId] = useState<number | null>(null)
+  const [showCheckoutAll, setShowCheckoutAll] = useState(false)
+  const [checkoutAllLoading, setCheckoutAllLoading] = useState(false)
   const [hiddenIds, setHiddenIds] = useState<Set<number>>(() => {
     if (typeof window === 'undefined') return new Set()
     try {
       const stored = localStorage.getItem('hive-hidden-logs')
       if (stored) {
         const { date, ids } = JSON.parse(stored)
-        if (date === new Date().toISOString().slice(0, 10)) return new Set(ids)
+        if (date === todayString()) return new Set(ids)
       }
     } catch {}
     return new Set()
   })
 
   const isAdmin = userRole === 'ADMIN'
+  const isAdminOrManager = userRole === 'ADMIN' || userRole === 'MANAGER'
+
+  const handleCheckoutAll = async () => {
+    setCheckoutAllLoading(true)
+    try {
+      const res = await fetch('/api/checkout/auto', { method: 'POST' })
+      if (res.ok) {
+        const data = await res.json()
+        toast(t('dash.checkoutAllDone').replace('{count}', String(data.count)))
+        await fetchLogs()
+      }
+    } finally {
+      setCheckoutAllLoading(false)
+      setShowCheckoutAll(false)
+    }
+  }
 
   const fetchLogs = useCallback(async () => {
     setLoading(true)
@@ -99,7 +125,7 @@ export function TodayFeedTable({ refreshTrigger, onLogsFetched, userRole }: Toda
       const next = new Set([...prev, confirmId])
       try {
         localStorage.setItem('hive-hidden-logs', JSON.stringify({
-          date: new Date().toISOString().slice(0, 10),
+          date: todayString(),
           ids: [...next],
         }))
       } catch {}
@@ -109,6 +135,7 @@ export function TodayFeedTable({ refreshTrigger, onLogsFetched, userRole }: Toda
   }
 
   const visibleLogs = logs.filter(l => !hiddenIds.has(l.id))
+  const insideCount = visibleLogs.filter(l => !l.checkOutTime).length
   const fmt = (iso: string) => new Date(iso).toLocaleTimeString('en-JO', { hour: '2-digit', minute: '2-digit' })
   const now = new Date()
 
@@ -118,16 +145,26 @@ export function TodayFeedTable({ refreshTrigger, onLogsFetched, userRole }: Toda
         style={{ borderBottom: '1px solid rgba(245, 197, 24, 0.08)', background: 'rgba(255,255,255,0.02)' }}
       >
         <h2 className="text-xs font-black text-white/50 uppercase tracking-widest flex items-center gap-3">
-          Today&apos;s Check-Ins
+          {t('dash.todaysCheckIns')}
           <span className="px-2 py-0.5 rounded-full text-[#F5C518] text-[11px] font-black"
             style={{ background: 'rgba(245, 197, 24, 0.1)', border: '1px solid rgba(245, 197, 24, 0.2)' }}
           >
             {visibleLogs.length}
           </span>
         </h2>
-        <button onClick={fetchLogs} className="text-white/30 hover:text-[#F5C518] transition-colors p-1" title="Refresh">
-          <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
-        </button>
+        <div className="flex items-center gap-2">
+          {isAdminOrManager && insideCount > 0 && (
+            <button
+              onClick={() => setShowCheckoutAll(true)}
+              className="px-2.5 py-1 rounded-lg bg-orange-500/10 border border-orange-500/20 text-orange-400 text-[10px] font-bold flex items-center gap-1 hover:bg-orange-500/20 transition-all"
+            >
+              <UserX size={12} /> {t('dash.checkoutAll')}
+            </button>
+          )}
+          <button onClick={fetchLogs} className="text-white/30 hover:text-[#F5C518] transition-colors p-1" title="Refresh">
+            <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-auto">
@@ -138,8 +175,8 @@ export function TodayFeedTable({ refreshTrigger, onLogsFetched, userRole }: Toda
             >
               <CalendarDays size={32} className="text-[#F5C518]" />
             </div>
-            <p className="text-lg font-bold text-white/60 mb-1">Ready for today&apos;s visitors</p>
-            <p className="text-sm text-white/25">Scan an RFID card or search to check someone in.</p>
+            <p className="text-lg font-bold text-white/60 mb-1">{t('dash.readyForVisitors')}</p>
+            <p className="text-sm text-white/25">{t('dash.scanRfid')}</p>
           </div>
         ) : (
           <table className="w-full text-sm">
@@ -147,9 +184,10 @@ export function TodayFeedTable({ refreshTrigger, onLogsFetched, userRole }: Toda
               style={{ background: 'rgba(10, 10, 10, 0.8)', backdropFilter: 'blur(8px)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}
             >
               <tr>
-                <th className="text-left px-5 py-3 text-[10px] font-bold text-white/30 uppercase tracking-widest">Name</th>
-                <th className="text-left px-5 py-3 text-[10px] font-bold text-white/30 uppercase tracking-widest">Check-In</th>
-                <th className="text-left px-5 py-3 text-[10px] font-bold text-white/30 uppercase tracking-widest">Check-Out</th>
+                <th className="text-left px-5 py-3 text-[10px] font-bold text-white/30 uppercase tracking-widest">{t('dash.name')}</th>
+                <th className="text-left px-5 py-3 text-[10px] font-bold text-white/30 uppercase tracking-widest">{t('dash.checkIn')}</th>
+                <th className="text-left px-5 py-3 text-[10px] font-bold text-white/30 uppercase tracking-widest">{t('dash.checkOut')}</th>
+                <th className="text-left px-5 py-3 text-[10px] font-bold text-white/30 uppercase tracking-widest">{t('dash.duration')}</th>
                 <th className="px-5 py-3" />
               </tr>
             </thead>
@@ -183,9 +221,16 @@ export function TodayFeedTable({ refreshTrigger, onLogsFetched, userRole }: Toda
                               {log.student!.fullName}
                             </button>
                           ) : (
-                            <span className="font-bold text-white/40 text-[15px] leading-tight">{log.studentName || 'Deleted Student'}</span>
+                            <span className="font-bold text-white/40 text-[15px] leading-tight">{log.studentName || t('dash.deletedStudent')}</span>
                           )}
-                          <p className="text-xs font-medium text-white/25 mt-0.5">{log.student?.phone || (!log.student ? 'account deleted' : '')}</p>
+                          <p className="text-xs font-medium text-white/25 mt-0.5">
+                            {log.student?.phone || (!log.student ? t('dash.accountDeleted') : '')}
+                            {log.processedByUser ? (
+                              <span className="ml-2 inline-flex items-center gap-0.5 text-white/20"><User size={9} /> {t('log.processedBy')} {log.processedByUser.name || log.processedByUser.email.split('@')[0]}</span>
+                            ) : log.processedBy === null || log.processedBy === undefined ? (
+                              <span className="ml-2 inline-flex items-center gap-0.5 text-white/15"><Smartphone size={9} /> {t('log.selfCheckIn')}</span>
+                            ) : null}
+                          </p>
                         </div>
                         {warning && (
                           <span className="ml-2 flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded whitespace-nowrap"
@@ -212,9 +257,31 @@ export function TodayFeedTable({ refreshTrigger, onLogsFetched, userRole }: Toda
                           style={{ background: 'rgba(245, 197, 24, 0.08)', border: '1px solid rgba(245, 197, 24, 0.15)' }}
                         >
                           <span className="w-1.5 h-1.5 rounded-full bg-[#F5C518] animate-pulse" />
-                          Inside
+                          {t('dash.inside')}
                         </span>
                       )}
+                    </td>
+                    <td className="px-5 py-3.5">
+                      {(() => {
+                        const start = new Date(log.checkInTime).getTime()
+                        const end = log.checkOutTime ? new Date(log.checkOutTime).getTime() : Date.now()
+                        const hours = (end - start) / (1000 * 60 * 60)
+                        const h = Math.floor(hours)
+                        const m = Math.floor((hours - h) * 60)
+                        const label = h > 0 ? `${h}h ${m}m` : `${m}m`
+                        const isLong = hours >= 8
+                        const isWarning = hours >= 6 && hours < 8
+                        return (
+                          <span className={`text-xs font-bold px-2 py-1 rounded ${
+                            isLong ? 'bg-red-500/10 text-red-400 border border-red-500/20' :
+                            isWarning ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20' :
+                            'text-white/40'
+                          }`}>
+                            {isLong && <AlertTriangle size={10} className="inline mr-1" />}
+                            {label}
+                          </span>
+                        )
+                      })()}
                     </td>
                     <td className="px-5 py-3.5 text-right w-48">
                       <div className="flex items-center justify-end gap-2">
@@ -227,7 +294,7 @@ export function TodayFeedTable({ refreshTrigger, onLogsFetched, userRole }: Toda
                             className="px-4 py-2 opacity-60 group-hover:opacity-100 bg-[#F5C518] hover:bg-[#D5A711] border-[#F5C518] text-black font-bold transition-all"
                           >
                             <LogOut size={14} className="mr-1.5" />
-                            Check-Out
+                            {t('dash.checkOut')}
                           </Button>
                         )}
                         {isAdmin && (
@@ -253,10 +320,20 @@ export function TodayFeedTable({ refreshTrigger, onLogsFetched, userRole }: Toda
         open={confirmId !== null}
         onClose={() => setConfirmId(null)}
         onConfirm={handleHideLog}
-        title="Dismiss Check-In"
-        message="Hide this entry from the dashboard? The log will still be available on the Logs page."
-        confirmLabel="Dismiss"
+        title={t('dash.dismissCheckIn')}
+        message={t('dash.dismissMsg')}
+        confirmLabel={t('dash.dismiss')}
         variant="warning"
+      />
+
+      <ConfirmModal
+        open={showCheckoutAll}
+        onClose={() => setShowCheckoutAll(false)}
+        onConfirm={handleCheckoutAll}
+        title={t('dash.checkoutAll')}
+        message={t('dash.checkoutAllMsg').replace('{count}', String(insideCount))}
+        confirmLabel={checkoutAllLoading ? '...' : t('dash.checkoutAll')}
+        variant="danger"
       />
     </div>
   )

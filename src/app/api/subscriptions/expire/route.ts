@@ -4,7 +4,7 @@ import { autoExpireSubscriptions } from '@/lib/autoExpire'
 // POST — auto-expire subscriptions past their expiry date
 export async function POST() {
   try {
-    const session = await requireAuth('ADMIN', 'MANAGER', 'REGISTERATION_COUNTER', 'BARISTA')
+    const session = await requireAuth('ADMIN', 'MANAGER', 'STAFF')
     if (session instanceof Response) return session
 
     const count = await autoExpireSubscriptions()

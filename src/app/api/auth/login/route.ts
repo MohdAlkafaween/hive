@@ -2,8 +2,9 @@ import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
 import { encrypt } from '@/lib/auth'
-import { checkRateLimit, getClientIp } from '@/lib/rateLimit'
+import { checkRateLimit, clearRateLimit, getClientIp } from '@/lib/rateLimit'
 import { isValidEmail } from '@/lib/sanitize'
+import { todayString } from '@/lib/subscriptionLogic'
 import { auditLog } from '@/lib/auditLog'
 
 // Pre-computed valid bcrypt hash for timing-attack prevention
@@ -13,17 +14,15 @@ const DUMMY_HASH = bcrypt.hashSync('timing-attack-prevention-dummy', 12)
 
 export async function POST(req: Request) {
   try {
-    // Rate limit: 5 attempts per 15 minutes per IP
     const ip = getClientIp(req)
-    const limit = checkRateLimit(`login:${ip}`, 5, 15 * 60 * 1000)
-    if (limit.limited) {
-      auditLog('LOGIN_RATE_LIMITED', { ip, details: `Retry after ${Math.ceil(limit.retryAfterMs / 1000)}s` })
+
+    // Secondary IP-based rate limit — prevents enumeration attacks across many emails
+    const ipLimit = checkRateLimit(`login:ip:${ip}`, 30, 15 * 60 * 1000)
+    if (ipLimit.limited) {
+      auditLog('LOGIN_RATE_LIMITED', { ip, details: `IP rate limited. Retry after ${Math.ceil(ipLimit.retryAfterMs / 1000)}s` })
       return NextResponse.json(
         { error: 'Too many login attempts. Try again later.' },
-        {
-          status: 429,
-          headers: { 'Retry-After': String(Math.ceil(limit.retryAfterMs / 1000)) },
-        }
+        { status: 429, headers: { 'Retry-After': String(Math.ceil(ipLimit.retryAfterMs / 1000)) } }
       )
     }
 
@@ -44,6 +43,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Invalid password' }, { status: 400 })
     }
 
+    // Primary per-email rate limit: 5 failed attempts per 15 minutes
+    const emailLimit = checkRateLimit(`login:email:${email}`, 5, 15 * 60 * 1000)
+    if (emailLimit.limited) {
+      const retryMin = Math.ceil(emailLimit.retryAfterMs / 60000)
+      auditLog('LOGIN_RATE_LIMITED', { ip, email, details: `Per-email rate limited. Retry after ${retryMin}m` })
+      return NextResponse.json(
+        { error: `Too many failed attempts for this account. Try again in ${retryMin} minute${retryMin === 1 ? '' : 's'}.` },
+        { status: 429, headers: { 'Retry-After': String(Math.ceil(emailLimit.retryAfterMs / 1000)) } }
+      )
+    }
+
     const user = await prisma.user.findUnique({ where: { email } })
 
     // Constant-time comparison — don't reveal whether user exists
@@ -55,10 +65,12 @@ export async function POST(req: Request) {
 
     const isMatch = await bcrypt.compare(password, user.password)
     if (!isMatch) {
-      checkRateLimit(`login:email:${email}`, 5, 15 * 60 * 1000)
       auditLog('LOGIN_FAILED', { ip, email, userId: user.id, details: 'Wrong password' })
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 })
     }
+
+    // Clear the per-email rate limit on successful login
+    clearRateLimit(`login:email:${email}`)
 
     // Check if account is disabled
     if (user.isActive === false) {
@@ -83,7 +95,7 @@ export async function POST(req: Request) {
 
     // Auto clock-in for staff shift tracking
     try {
-      const today = new Date().toISOString().slice(0, 10)
+      const today = todayString()
       const existingShift = await prisma.staffShift.findFirst({
         where: { userId: user.id, date: today, clockOut: null },
       })

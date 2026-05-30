@@ -6,7 +6,7 @@ import { isValidDateString } from '@/lib/sanitize'
 // GET — barista order logs, optionally filtered by date
 export async function GET(req: NextRequest) {
   try {
-    const session = await requireAuth('ADMIN', 'BARISTA')
+    const session = await requireAuth('ADMIN', 'STAFF')
     if (session instanceof Response) return session
 
     const date = req.nextUrl.searchParams.get('date')
@@ -22,29 +22,49 @@ export async function GET(req: NextRequest) {
         },
         orderBy: { createdAt: 'desc' },
         include: { menuItem: true },
+        take: 500, // safety limit
       })
       return Response.json(orders)
     }
 
-    // All dates — return dates with revenue totals
-    const allOrders = await prisma.baristaOrder.findMany({
-      select: { createdAt: true, totalPrice: true },
+    // Date range filtering (default: last 30 days) to avoid unbounded queries
+    const startDate = req.nextUrl.searchParams.get('startDate')
+    const endDate = req.nextUrl.searchParams.get('endDate')
+
+    const now = new Date()
+    const thirtyDaysAgo = new Date(now)
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+
+    const rangeStart = (startDate && isValidDateString(startDate))
+      ? new Date(startDate + 'T00:00:00')
+      : thirtyDaysAgo
+    const rangeEnd = (endDate && isValidDateString(endDate))
+      ? new Date(endDate + 'T23:59:59.999')
+      : now
+
+    // Use Prisma groupBy for date aggregation instead of loading all orders into memory
+    const ordersByDate = await prisma.baristaOrder.groupBy({
+      by: ['createdAt'],
+      where: { createdAt: { gte: rangeStart, lte: rangeEnd } },
+      _count: { id: true },
+      _sum: { totalPrice: true },
       orderBy: { createdAt: 'desc' },
     })
 
-    // Group by date
+    // Group by date string in JS (groupBy on DateTime gives per-second, we need per-day)
     const dateMap = new Map<string, { count: number; revenue: number }>()
-    for (const order of allOrders) {
-      const d = order.createdAt.toISOString().slice(0, 10)
-      const entry = dateMap.get(d) || { count: 0, revenue: 0 }
-      entry.count++
-      entry.revenue += order.totalPrice
-      dateMap.set(d, entry)
+    for (const entry of ordersByDate) {
+      const d = entry.createdAt.toISOString().slice(0, 10)
+      const existing = dateMap.get(d) || { count: 0, revenue: 0 }
+      existing.count += entry._count.id
+      existing.revenue += entry._sum.totalPrice || 0
+      dateMap.set(d, existing)
     }
 
     const dates = Array.from(dateMap.entries())
       .map(([date, data]) => ({ date, count: data.count, revenue: data.revenue }))
       .sort((a, b) => b.date.localeCompare(a.date))
+      .slice(0, 500) // safety limit
 
     return Response.json(dates)
   } catch (e) {

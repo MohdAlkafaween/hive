@@ -20,6 +20,23 @@
   color-scheme: dark;
 }
 
+/* RTL: switch to Arabic font when dir=rtl */
+html[dir="rtl"] {
+  font-family: var(--font-arabic), var(--font-inter), sans-serif;
+}
+
+/* RTL: ensure text alignment follows direction */
+html[dir="rtl"] input,
+html[dir="rtl"] textarea,
+html[dir="rtl"] select {
+  text-align: right;
+}
+
+/* RTL: ensure proper transition for layout flip */
+html[dir="rtl"] .flex {
+  /* flex direction stays row — CSS logical properties handle the rest */
+}
+
 *, *::before, *::after {
   box-sizing: border-box;
 }

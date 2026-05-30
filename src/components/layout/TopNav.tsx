@@ -1,13 +1,18 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Keyboard, LogOut } from 'lucide-react'
+import { Keyboard, LogOut, Globe, AlertTriangle } from 'lucide-react'
+import { useI18n } from '@/lib/i18n'
+import { useAuth } from '@/hooks/useAuth'
+import { AnimatePresence, motion } from 'framer-motion'
 
 export function TopNav() {
   const router = useRouter()
+  const { lang, setLang, t } = useI18n()
+  const { user } = useAuth()
   const [mounted, setMounted] = useState(false)
   const [time, setTime] = useState(new Date())
-  const [user, setUser] = useState<{ email: string; role: string } | null>(null)
+  const [showRegisterWarning, setShowRegisterWarning] = useState(false)
 
   useEffect(() => {
     setMounted(true)
@@ -15,14 +20,23 @@ export function TopNav() {
     return () => clearInterval(timer)
   }, [])
 
-  useEffect(() => {
-    fetch('/api/auth/me')
-      .then(res => res.json())
-      .then(data => { if (data.user) setUser(data.user) })
-      .catch(() => {})
-  }, [])
-
   const handleLogout = async () => {
+    try {
+      const res = await fetch('/api/cash-register/summary')
+      if (res.ok) {
+        const data = await res.json()
+        if (data.openRegister) {
+          setShowRegisterWarning(true)
+          return
+        }
+      }
+    } catch { /* proceed with logout */ }
+    await fetch('/api/auth/logout', { method: 'POST' })
+    router.push('/login')
+  }
+
+  const forceLogout = async () => {
+    setShowRegisterWarning(false)
     await fetch('/api/auth/logout', { method: 'POST' })
     router.push('/login')
   }
@@ -85,11 +99,26 @@ export function TopNav() {
               <span className="relative inline-flex rounded-full h-2 w-2 bg-[#F5C518]"></span>
             </span>
             <Keyboard className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">SCANNER: ARMED</span>
+            <span className="hidden sm:inline">{t('nav.scanner')}</span>
           </div>
 
+          {/* Language toggle */}
+          <button
+            onClick={() => setLang(lang === 'en' ? 'ar' : 'en')}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[11px] font-bold tracking-wide transition-all duration-200 hover:scale-[1.02]"
+            style={{
+              background: 'rgba(255,255,255,0.06)',
+              border: '1px solid rgba(255,255,255,0.1)',
+              color: 'rgba(255,255,255,0.6)',
+            }}
+            title={lang === 'en' ? 'التبديل للعربية' : 'Switch to English'}
+          >
+            <Globe className="w-3.5 h-3.5" />
+            <span>{lang === 'en' ? 'AR' : 'EN'}</span>
+          </button>
+
           {/* User info + logout */}
-          <div className="flex items-center gap-2 pl-2 border-l border-white/10">
+          <div className="flex items-center gap-2 ps-2 border-s border-white/10">
             {user ? (
               <div className="flex flex-col items-end animate-fade-in">
                 <span className="text-xs font-bold text-white/90">{user.email.split('@')[0]}</span>
@@ -108,6 +137,25 @@ export function TopNav() {
           </div>
         </div>
       </div>
+
+      {/* Register open warning on logout */}
+      <AnimatePresence>
+        {showRegisterWarning && (
+          <motion.div className="fixed inset-0 z-[100] flex items-center justify-center p-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowRegisterWarning(false)} />
+            <motion.div className="relative w-full max-w-sm rounded-2xl border border-orange-500/20 p-6" style={{ background: 'linear-gradient(135deg, #1A1A1A 0%, #0F0F0F 100%)' }} initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}>
+              <div className="text-center mb-4">
+                <AlertTriangle size={36} className="text-orange-400 mx-auto mb-2" />
+                <h3 className="text-lg font-bold text-white">{t('register.logoutWarning')}</h3>
+              </div>
+              <div className="flex flex-col gap-2">
+                <button onClick={() => { setShowRegisterWarning(false); router.push('/barista') }} className="w-full py-2.5 rounded-lg bg-[#F5C518] hover:bg-[#D5A711] text-black text-sm font-bold transition-all">{t('register.goBack')}</button>
+                <button onClick={forceLogout} className="w-full py-2.5 rounded-lg border border-white/10 text-white/50 hover:text-white text-sm font-bold transition-all">{t('register.logoutAnyway')}</button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </header>
   )
 }

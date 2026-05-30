@@ -6,7 +6,7 @@ import { sanitizeString } from '@/lib/sanitize'
 // GET all settings
 export async function GET() {
   try {
-    const session = await requireAuth('ADMIN', 'MANAGER', 'REGISTERATION_COUNTER', 'BARISTA')
+    const session = await requireAuth('ADMIN', 'MANAGER', 'STAFF')
     if (session instanceof Response) return session
 
     const settings = await prisma.appSetting.findMany()
@@ -18,6 +18,38 @@ export async function GET() {
     return Response.json({ error: 'Failed to load settings' }, { status: 500 })
   }
 }
+
+// Whitelist of allowed setting keys to prevent arbitrary data injection
+const ALLOWED_KEYS = new Set([
+  'maxCapacity',
+  'displayEnabled',
+  'displayConnection',
+  'nextReceiptNumber',
+  'nextStudentNumber',
+  'maxFreezeDays',
+  'houseName',
+  'houseNameAr',
+  'defaultPlan',
+  'businessName',
+  'receiptFooter',
+  'autoCheckoutTime',
+  'maxSessionHours',
+  'backupFrequencyHours',
+  'backupRetentionDays',
+  'announcement',
+  'publicDisplayEnabled',
+  'publicDisplayConnection',
+  'qrEnabled',
+  'planPriceDaily',
+  'planPriceWeekly',
+  'planPriceMonthly',
+  'planVisitsDaily',
+  'planVisitsWeekly',
+  'planVisitsMonthly',
+  'planDaysDaily',
+  'planDaysWeekly',
+  'planDaysMonthly',
+])
 
 // PUT — upsert a setting (ADMIN only)
 export async function PUT(req: NextRequest) {
@@ -31,6 +63,10 @@ export async function PUT(req: NextRequest) {
     const key = sanitizeString(body.key)
     const value = sanitizeString(body.value)
     if (!key || value === undefined) return Response.json({ error: 'key and value required' }, { status: 400 })
+
+    if (!ALLOWED_KEYS.has(key)) {
+      return Response.json({ error: `Unknown setting key: ${key}` }, { status: 400 })
+    }
 
     const setting = await prisma.appSetting.upsert({
       where: { key },

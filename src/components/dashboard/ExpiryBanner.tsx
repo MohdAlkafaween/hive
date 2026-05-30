@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { AlertTriangle, X, ChevronRight } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { useI18n } from '@/lib/i18n'
 
 interface ExpiringStudent {
   id: number
@@ -11,25 +12,17 @@ interface ExpiringStudent {
 }
 
 export function ExpiryBanner() {
+  const { t } = useI18n()
   const [expiring, setExpiring] = useState<ExpiringStudent[]>([])
   const [dismissed, setDismissed] = useState(false)
 
   useEffect(() => {
-    fetch('/api/students')
-      .then(r => r.ok ? r.json() : [])
-      .then((students: any[]) => {
-        const now = Date.now()
-        const results: ExpiringStudent[] = []
-        for (const s of students) {
-          if (!s.subscriptions?.length) continue
-          const active = s.subscriptions.find((sub: any) => sub.isActive && new Date(sub.expiryDate).getTime() > now)
-          if (!active) continue
-          const daysLeft = Math.ceil((new Date(active.expiryDate).getTime() - now) / 86400000)
-          if (daysLeft <= 3) {
-            results.push({ id: s.id, fullName: s.fullName, daysLeft, planType: active.planType })
-          }
+    fetch('/api/dashboard/stats')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data?.expiring) {
+          setExpiring(data.expiring)
         }
-        setExpiring(results.sort((a, b) => a.daysLeft - b.daysLeft))
       })
       .catch(() => {})
   }, [])
@@ -48,11 +41,11 @@ export function ExpiryBanner() {
           <AlertTriangle size={16} className="text-amber-400 shrink-0" />
           <div className="flex-1 min-w-0">
             <p className="text-xs font-bold text-amber-400">
-              {expiring.length} subscription{expiring.length !== 1 ? 's' : ''} expiring soon
+              {expiring.length} {t('dash.subsExpiringSoon')}
             </p>
             <p className="text-[10px] text-amber-300/50 truncate">
-              {expiring.slice(0, 3).map(s => `${s.fullName} (${s.daysLeft}d)`).join(', ')}
-              {expiring.length > 3 && ` +${expiring.length - 3} more`}
+              {expiring.slice(0, 3).map(s => `${s.fullName} (${s.daysLeft}${t('common.daysShort')})`).join(', ')}
+              {expiring.length > 3 && ` +${expiring.length - 3} ${t('common.more')}`}
             </p>
           </div>
           <button onClick={() => setDismissed(true)} className="p-1 rounded hover:bg-white/10 text-amber-400/50 hover:text-amber-400 transition-colors">

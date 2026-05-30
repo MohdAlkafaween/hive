@@ -2,14 +2,15 @@ import { NextRequest } from 'next/server'
 import prisma from '@/lib/prisma'
 import { requireAuth } from '@/lib/authGuard'
 import { isValidId } from '@/lib/sanitize'
+import { todayString } from '@/lib/subscriptionLogic'
 
 // GET — today's waitlist
 export async function GET() {
   try {
-    const session = await requireAuth('ADMIN', 'MANAGER', 'REGISTERATION_COUNTER')
+    const session = await requireAuth('ADMIN', 'MANAGER', 'STAFF')
     if (session instanceof Response) return session
 
-    const today = new Date().toISOString().slice(0, 10)
+    const today = todayString()
     const entries = await prisma.waitlistEntry.findMany({
       where: { date: today },
       include: { student: { select: { id: true, fullName: true, phone: true } } },
@@ -25,7 +26,7 @@ export async function GET() {
 // POST — add student to waitlist
 export async function POST(req: NextRequest) {
   try {
-    const session = await requireAuth('ADMIN', 'MANAGER', 'REGISTERATION_COUNTER')
+    const session = await requireAuth('ADMIN', 'MANAGER', 'STAFF')
     if (session instanceof Response) return session
 
     const body = await req.json().catch(() => null)
@@ -33,7 +34,7 @@ export async function POST(req: NextRequest) {
       return Response.json({ error: 'Valid studentId required' }, { status: 400 })
     }
 
-    const today = new Date().toISOString().slice(0, 10)
+    const today = todayString()
 
     // Check if already on waitlist
     const existing = await prisma.waitlistEntry.findFirst({
@@ -62,7 +63,7 @@ export async function POST(req: NextRequest) {
 // PATCH — admit or cancel a waitlist entry
 export async function PATCH(req: NextRequest) {
   try {
-    const session = await requireAuth('ADMIN', 'MANAGER', 'REGISTERATION_COUNTER')
+    const session = await requireAuth('ADMIN', 'MANAGER', 'STAFF')
     if (session instanceof Response) return session
 
     const body = await req.json().catch(() => null)

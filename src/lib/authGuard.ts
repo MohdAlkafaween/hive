@@ -24,7 +24,7 @@ export async function requireAuth(...allowedRoles: string[]): Promise<Record<str
   // Live DB role check — never trust the JWT role claim alone
   const user = await prisma.user.findUnique({
     where: { id: session.userId as number },
-    select: { role: true },
+    select: { role: true, isActive: true },
   })
 
   if (!user) {
@@ -35,6 +35,18 @@ export async function requireAuth(...allowedRoles: string[]): Promise<Record<str
     return new Response(
       JSON.stringify({ error: 'User no longer exists' }),
       { status: 401, headers: { 'Content-Type': 'application/json' } }
+    )
+  }
+
+  // Block deactivated users BEFORE any role/permission check
+  if (!user.isActive) {
+    auditLog('LOGIN_BLOCKED', {
+      userId: session.userId as number,
+      details: 'Deactivated user attempted API access',
+    })
+    return new Response(
+      JSON.stringify({ error: 'Account disabled' }),
+      { status: 403, headers: { 'Content-Type': 'application/json' } }
     )
   }
 

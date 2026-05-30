@@ -3,6 +3,8 @@ import { requireAuth } from '@/lib/authGuard'
 import { readFile, copyFile, mkdir } from 'fs/promises'
 import { join } from 'path'
 import { existsSync } from 'fs'
+import prisma from '@/lib/prisma'
+import { getClientIp } from '@/lib/rateLimit'
 
 // GET — download database backup (ADMIN only)
 export async function GET() {
@@ -38,10 +40,19 @@ export async function GET() {
 }
 
 // POST — restore database from upload (ADMIN only)
+// Requires X-Confirm-Restore: "true" header as a safety gate
 export async function POST(req: NextRequest) {
   try {
     const session = await requireAuth('ADMIN')
     if (session instanceof Response) return session
+
+    // Safety gate — require explicit confirmation header
+    if (req.headers.get('X-Confirm-Restore') !== 'true') {
+      return Response.json(
+        { error: 'Restore requires X-Confirm-Restore: true header' },
+        { status: 400 }
+      )
+    }
 
     const formData = await req.formData()
     const file = formData.get('database') as File | null
@@ -61,8 +72,28 @@ export async function POST(req: NextRequest) {
       await copyFile(dbPath, join(backupDir, `pre-restore-${timestamp}.db`))
     }
 
-    // Write uploaded file as new DB
+    // Validate uploaded file is a valid SQLite database
     const bytes = new Uint8Array(await file.arrayBuffer())
+    const SQLITE_MAGIC = 'SQLite format 3\0'
+    const header = new TextDecoder('ascii').decode(bytes.slice(0, 16))
+    if (header !== SQLITE_MAGIC) {
+      return Response.json({ error: 'Invalid SQLite database file' }, { status: 400 })
+    }
+
+    // Audit trail (log BEFORE overwriting, since DB will be replaced)
+    const ip = getClientIp(req)
+    await prisma.staffAuditLog.create({
+      data: {
+        userId: session.userId as number,
+        email: session.email as string,
+        role: session.role as string,
+        event: 'DB_RESTORE',
+        ip,
+        details: `Restored database from upload (${file.name}, ${(file.size / 1024).toFixed(1)} KB). Pre-restore backup: pre-restore-${timestamp}.db`,
+      },
+    })
+
+    // Write validated file as new DB
     const { writeFile: wf } = await import('fs/promises')
     await wf(dbPath, bytes)
 

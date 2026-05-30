@@ -1,4 +1,3 @@
-import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
 import { requireAuth } from '@/lib/authGuard'
@@ -11,26 +10,29 @@ export async function POST(req: Request) {
     if (session instanceof Response) return session
 
     const body = await req.json().catch(() => null)
-    if (!body) return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
+    if (!body) return Response.json({ error: 'Invalid request body' }, { status: 400 })
 
     const { email, password, role, name, phone } = body
 
     if (!email || !password) {
-      return NextResponse.json({ error: 'Email and password required' }, { status: 400 })
+      return Response.json({ error: 'Email and password required' }, { status: 400 })
     }
 
     if (!isValidEmail(email)) {
-      return NextResponse.json({ error: 'Invalid email format' }, { status: 400 })
+      return Response.json({ error: 'Invalid email format' }, { status: 400 })
     }
 
     const passwordCheck = isStrongPassword(password)
     if (!passwordCheck.valid) {
-      return NextResponse.json({ error: passwordCheck.reason }, { status: 400 })
+      return Response.json({ error: passwordCheck.reason }, { status: 400 })
     }
 
-    // Only allow these roles
-    const allowedRoles = ['REGISTERATION_COUNTER', 'BARISTA', 'MANAGER', 'ADMIN']
-    const userRole = allowedRoles.includes(role) ? role : 'REGISTERATION_COUNTER'
+    // Only ADMINs can create other ADMINs — prevents privilege escalation
+    const validRoles = ['STAFF', 'MANAGER', 'ADMIN']
+    let userRole = validRoles.includes(role) ? role : 'STAFF'
+    if (role === 'ADMIN' && (session.role as string) !== 'ADMIN') {
+      return Response.json({ error: 'Only admins can create admin accounts' }, { status: 403 })
+    }
 
     // Validate permissions for MANAGER role
     let permissions = '[]'
@@ -42,7 +44,7 @@ export async function POST(req: Request) {
 
     const existingUser = await prisma.user.findUnique({ where: { email } })
     if (existingUser) {
-      return NextResponse.json({ error: 'User already exists' }, { status: 400 })
+      return Response.json({ error: 'User already exists' }, { status: 400 })
     }
 
     const passwordHash = await bcrypt.hash(password, 12) // Increased rounds from 10 to 12
@@ -58,8 +60,8 @@ export async function POST(req: Request) {
       },
     })
 
-    return NextResponse.json({ message: 'User registered', user: { email: user.email, role: user.role } })
+    return Response.json({ message: 'User registered', user: { email: user.email, role: user.role } })
   } catch {
-    return NextResponse.json({ error: 'Registration failed' }, { status: 500 })
+    return Response.json({ error: 'Registration failed' }, { status: 500 })
   }
 }

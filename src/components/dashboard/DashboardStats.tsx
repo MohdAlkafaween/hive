@@ -2,31 +2,31 @@
 import { useState, useEffect } from 'react'
 import { DollarSign, Users, CreditCard, TrendingUp } from 'lucide-react'
 import { motion } from 'framer-motion'
+import { useI18n } from '@/lib/i18n'
+import { todayString } from '@/lib/subscriptionLogic'
 
 interface DashboardStatsProps {
   checkInCount: number
 }
 
 export function DashboardStats({ checkInCount }: DashboardStatsProps) {
+  const { t } = useI18n()
   const [todayRevenue, setTodayRevenue] = useState(0)
   const [activeSubs, setActiveSubs] = useState(0)
   const [occupancy, setOccupancy] = useState({ current: 0, max: 0 })
 
   useEffect(() => {
     // Today's revenue
-    const today = new Date().toISOString().slice(0, 10)
+    const today = todayString()
     fetch(`/api/stats/daily?date=${today}`)
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d) setTodayRevenue(d.totalRevenue) })
       .catch(() => {})
 
-    // Active subscriptions count
-    fetch('/api/students')
-      .then(r => r.ok ? r.json() : [])
-      .then((students: any[]) => {
-        const active = students.filter((s: any) => s.subscriptions?.length > 0).length
-        setActiveSubs(active)
-      })
+    // Active subscriptions count — use lightweight dashboard endpoint
+    fetch('/api/dashboard/stats')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data) setActiveSubs(data.activeSubsCount) })
       .catch(() => {})
 
     // Capacity
@@ -53,25 +53,25 @@ export function DashboardStats({ checkInCount }: DashboardStatsProps) {
   const cards = [
     {
       icon: <DollarSign size={18} className="text-green-400" />,
-      label: "Today's Revenue",
+      label: t('dash.todaysRevenue'),
       value: `${todayRevenue.toFixed(1)} JD`,
       color: 'green',
     },
     {
       icon: <Users size={18} className="text-[#F5C518]" />,
-      label: 'Check-Ins Today',
+      label: t('dash.checkInsToday'),
       value: checkInCount.toString(),
       color: 'yellow',
     },
     {
       icon: <CreditCard size={18} className="text-blue-400" />,
-      label: 'Active Subs',
+      label: t('dash.activeSubs'),
       value: activeSubs.toString(),
       color: 'blue',
     },
     {
       icon: <TrendingUp size={18} className={occupancy.max > 0 && occupancy.current >= occupancy.max ? 'text-red-400' : 'text-purple-400'} />,
-      label: 'Occupancy',
+      label: t('dash.occupancy'),
       value: occupancy.max > 0 ? `${occupancy.current}/${occupancy.max}` : `${occupancy.current}`,
       color: occupancy.max > 0 && occupancy.current >= occupancy.max ? 'red' : 'purple',
     },

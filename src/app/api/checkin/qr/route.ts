@@ -24,6 +24,15 @@ export async function POST(req: NextRequest) {
 
     if (!student) return Response.json({ status: 'NOT_FOUND', reason: 'Student not found.' }, { status: 404 })
 
+    // Block SUSPENDED/BANNED students
+    if (student.status === 'SUSPENDED' || student.status === 'BANNED') {
+      return Response.json({
+        status: student.status,
+        reason: student.status === 'SUSPENDED' ? 'Account suspended. Please see the front desk.' : 'Access denied. Please see the front desk.',
+        student,
+      }, { status: 403 })
+    }
+
     const sub = student.subscriptions[0] ?? null
     if (!sub) return Response.json({ status: 'EXPIRED', reason: 'No active subscription.', student })
 
@@ -48,29 +57,54 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    const anyLogToday = await prisma.log.findFirst({ where: { studentId: student.id, date: today } })
-    const shouldDeductVisit = !anyLogToday
+    // Wrap in transaction to prevent race conditions from concurrent QR scans
+    const result = await prisma.$transaction(async (tx) => {
+      // Re-check inside transaction
+      const existingInTx = await tx.log.findFirst({
+        where: { studentId: student.id, date: today, checkOutTime: null },
+      })
+      if (existingInTx) return { duplicate: true, logId: existingInTx.id }
 
-    const log = await prisma.log.create({
-      data: { studentId: student.id, studentName: student.fullName, date: today },
+      const anyLogToday = await tx.log.findFirst({ where: { studentId: student.id, date: today } })
+      const shouldDeductVisit = !anyLogToday
+
+      const log = await tx.log.create({
+        data: { studentId: student.id, studentName: student.fullName, date: today, method: 'QR' },
+      })
+
+      let txSub = sub
+      if (shouldDeductVisit && sub.planType !== 'Daily') {
+        txSub = await tx.subscription.update({
+          where: { id: sub.id },
+          data: { visitsUsed: { increment: 1 } },
+        })
+        if (txSub.visitsUsed >= txSub.totalVisitsAllowed) {
+          txSub = await tx.subscription.update({
+            where: { id: sub.id },
+            data: { isActive: false },
+          })
+        }
+      }
+
+      await tx.student.update({ where: { id: student.id }, data: { lifetimeCheckIns: { increment: 1 } } })
+
+      return { duplicate: false, logId: log.id, updatedSub: txSub, shouldDeductVisit }
     })
 
-    let updatedSub = sub
-    if (shouldDeductVisit && sub.planType !== 'Daily') {
-      const newVisitsUsed = sub.visitsUsed + 1
-      const exhausted = newVisitsUsed >= sub.totalVisitsAllowed
-      updatedSub = await prisma.subscription.update({
-        where: { id: sub.id },
-        data: { visitsUsed: newVisitsUsed, ...(exhausted && { isActive: false }) },
+    if (result.duplicate) {
+      return Response.json({
+        status: 'ALREADY_IN', student, subscription: sub,
+        remainingVisits: sub.planType === 'Daily' ? null : sub.totalVisitsAllowed - sub.visitsUsed,
+        logId: result.logId, alreadyCheckedInToday: true,
       })
     }
 
-    await prisma.student.update({ where: { id: student.id }, data: { lifetimeCheckIns: { increment: 1 } } })
+    const { updatedSub, shouldDeductVisit } = result as { updatedSub: typeof sub; shouldDeductVisit: boolean; logId: number; duplicate: false }
 
     return Response.json({
       status: 'OK', student, subscription: updatedSub,
       remainingVisits: sub.planType === 'Daily' ? null : updatedSub.totalVisitsAllowed - updatedSub.visitsUsed,
-      logId: log.id, alreadyCheckedInToday: !shouldDeductVisit,
+      logId: result.logId, alreadyCheckedInToday: !shouldDeductVisit,
     })
   } catch (e) {
     console.error('[POST /api/checkin/qr]', e)

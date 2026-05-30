@@ -1,15 +1,16 @@
 import { NextRequest } from 'next/server'
 import prisma from '@/lib/prisma'
 import { requireAuth } from '@/lib/authGuard'
+import { todayString } from '@/lib/subscriptionLogic'
 
 // GET — list shifts (admin: all, others: own)
 export async function GET(req: NextRequest) {
   try {
-    const session = await requireAuth('ADMIN', 'MANAGER', 'REGISTERATION_COUNTER', 'BARISTA')
+    const session = await requireAuth('ADMIN', 'MANAGER', 'STAFF')
     if (session instanceof Response) return session
 
     const { searchParams } = new URL(req.url)
-    const date = searchParams.get('date') || new Date().toISOString().slice(0, 10)
+    const date = searchParams.get('date') || todayString()
 
     const userId = session.userId as number
     const role = session.role as string
@@ -31,10 +32,10 @@ export async function GET(req: NextRequest) {
 // POST — clock in (auto-called on login)
 export async function POST(req: NextRequest) {
   try {
-    const session = await requireAuth('ADMIN', 'MANAGER', 'REGISTERATION_COUNTER', 'BARISTA')
+    const session = await requireAuth('ADMIN', 'MANAGER', 'STAFF')
     if (session instanceof Response) return session
 
-    const today = new Date().toISOString().slice(0, 10)
+    const today = todayString()
 
     // Check if already clocked in today without clock-out
     const existing = await prisma.staffShift.findFirst({
@@ -60,10 +61,10 @@ export async function POST(req: NextRequest) {
 // PATCH — clock out
 export async function PATCH() {
   try {
-    const session = await requireAuth('ADMIN', 'MANAGER', 'REGISTERATION_COUNTER', 'BARISTA')
+    const session = await requireAuth('ADMIN', 'MANAGER', 'STAFF')
     if (session instanceof Response) return session
 
-    const today = new Date().toISOString().slice(0, 10)
+    const today = todayString()
     const openShift = await prisma.staffShift.findFirst({
       where: { userId: session.userId as number, date: today, clockOut: null },
     })

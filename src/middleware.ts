@@ -3,6 +3,12 @@ import type { NextRequest } from 'next/server'
 import { decrypt } from '@/lib/auth'
 
 // Security headers applied to every response
+// TODO: Implement CSP nonces for Next.js scripts to remove 'unsafe-inline' in production
+const isProd = process.env.NODE_ENV === 'production'
+const scriptSrc = isProd
+  ? "'self' 'unsafe-inline'" // No unsafe-eval in production
+  : "'self' 'unsafe-eval' 'unsafe-inline'" // Next.js dev needs unsafe-eval for HMR
+
 const securityHeaders = {
   'X-Content-Type-Options': 'nosniff',
   'X-Frame-Options': 'DENY',
@@ -11,7 +17,7 @@ const securityHeaders = {
   'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
   'Content-Security-Policy': [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-eval' 'unsafe-inline'", // Next.js needs these
+    `script-src ${scriptSrc}`,
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob:",
     "font-src 'self'",
@@ -33,7 +39,9 @@ export async function middleware(request: NextRequest) {
     path.startsWith('/api/auth/logout') ||
     path.startsWith('/api/auth/seed') ||
     path.startsWith('/api/auth/me') ||
-    path.startsWith('/api/checkin') ||
+    path === '/api/checkin' ||
+    path === '/api/checkin/qr' ||
+    path === '/api/checkin/search' ||
     path.startsWith('/api/rfid') ||
     path === '/display' ||
     path.startsWith('/api/display')
@@ -106,7 +114,7 @@ export async function middleware(request: NextRequest) {
     }
 
     if (path.startsWith('/barista')) {
-      if (role !== 'ADMIN' && role !== 'BARISTA' && !managerCanAccess('/barista')) {
+      if (role !== 'ADMIN' && role !== 'STAFF' && !managerCanAccess('/barista')) {
         const response = NextResponse.redirect(new URL('/', request.url))
         applySecurityHeaders(response)
         return response
@@ -114,18 +122,11 @@ export async function middleware(request: NextRequest) {
     }
 
     if (path.startsWith('/logs')) {
-      if (role !== 'ADMIN' && role !== 'REGISTERATION_COUNTER' && !managerCanAccess('/logs')) {
+      if (role !== 'ADMIN' && role !== 'STAFF' && !managerCanAccess('/logs')) {
         const response = NextResponse.redirect(new URL('/', request.url))
         applySecurityHeaders(response)
         return response
       }
-    }
-
-    // BARISTA role can only access /barista
-    if ((path === '/' || path.startsWith('/directory')) && role === 'BARISTA') {
-      const response = NextResponse.redirect(new URL('/barista', request.url))
-      applySecurityHeaders(response)
-      return response
     }
 
     // MANAGER with no access to current page → redirect to first allowed page
@@ -163,7 +164,7 @@ export async function middleware(request: NextRequest) {
     if (path.startsWith('/api/auth/register') && role !== 'ADMIN') {
       return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 })
     }
-    if (path.startsWith('/api/barista') && role !== 'ADMIN' && role !== 'BARISTA' && !managerCanAccess('/barista')) {
+    if (path.startsWith('/api/barista') && role !== 'ADMIN' && role !== 'STAFF' && !managerCanAccess('/barista')) {
       return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 })
     }
 

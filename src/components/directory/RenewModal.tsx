@@ -2,14 +2,33 @@
 import { useState, useEffect } from 'react'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
-import { Loader2, Ticket, CheckCircle2, XCircle } from 'lucide-react'
+import { todayString } from '@/lib/subscriptionLogic'
+import { Loader2, Ticket, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react'
 import { PLAN_DEFAULTS, PlanType } from '@/lib/subscriptionLogic'
 import type { ReceiptData } from '@/components/dashboard/ReceiptModal'
+import { useI18n } from '@/lib/i18n'
 
-const PLANS: PlanType[] = ['Daily', 'Weekly', 'Monthly']
+interface ApiPlan {
+  id: number
+  name: string
+  nameAr?: string
+  durationDays: number
+  totalVisits: number
+  price: number
+  isActive: boolean
+  sortOrder: number
+}
+
+interface PlanOption {
+  id: number | null // null for hardcoded fallback plans
+  name: string
+  nameAr?: string
+  price: number
+  totalVisitsAllowed: number
+  durationDays: number
+}
+
 const GATEWAYS = ['Cash', 'CliQ', 'eFAWATEERcom', 'Credit Card']
-
-type PlanConfig = Record<PlanType, { price: number; totalVisitsAllowed: number; durationDays: number }>
 
 interface RenewModalProps {
   open: boolean
@@ -20,34 +39,67 @@ interface RenewModalProps {
 }
 
 export function RenewModal({ open, onClose, studentId, studentName, onRenewed }: RenewModalProps) {
-  const [planConfig, setPlanConfig] = useState<PlanConfig>(PLAN_DEFAULTS)
-  const [plan, setPlan]         = useState<PlanType>('Monthly')
+  const { t, lang } = useI18n()
+  const [plans, setPlans] = useState<PlanOption[]>([])
+  const [selectedPlanIdx, setSelectedPlanIdx] = useState(0)
   const [gateway, setGateway]   = useState('Cash')
-  const [amountPaid, setAmount] = useState(PLAN_DEFAULTS.Monthly.price)
-  const [startDate, setStart]   = useState(new Date().toISOString().slice(0, 10))
+  const [amountPaid, setAmount] = useState(0)
+  const [startDate, setStart]   = useState(todayString())
   const [saving, setSaving]     = useState(false)
   const [error, setError]       = useState('')
+  const [plansWarning, setPlansWarning] = useState(false)
 
-  // Load plan pricing from settings
+  // Load plans from API, fallback to PLAN_DEFAULTS
   useEffect(() => {
     if (!open) return
-    fetch('/api/settings')
+    fetch('/api/plans')
       .then(r => r.ok ? r.json() : null)
-      .then((settings: Record<string, string> | null) => {
-        if (!settings) return
-        const config = { ...PLAN_DEFAULTS }
-        for (const p of PLANS) {
-          const priceKey = `plan_${p}_price`
-          const visitsKey = `plan_${p}_visits`
-          const daysKey = `plan_${p}_days`
-          if (settings[priceKey]) config[p] = { ...config[p], price: parseFloat(settings[priceKey]) }
-          if (settings[visitsKey]) config[p] = { ...config[p], totalVisitsAllowed: parseInt(settings[visitsKey]) }
-          if (settings[daysKey]) config[p] = { ...config[p], durationDays: parseInt(settings[daysKey]) }
+      .then((apiPlans: ApiPlan[] | null) => {
+        if (apiPlans && apiPlans.length > 0) {
+          const activePlans = apiPlans.filter(p => p.isActive)
+          if (activePlans.length > 0) {
+            const opts: PlanOption[] = activePlans.map(p => ({
+              id: p.id,
+              name: p.name,
+              nameAr: p.nameAr || undefined,
+              price: p.price,
+              totalVisitsAllowed: p.totalVisits === -1 ? 999 : p.totalVisits,
+              durationDays: p.durationDays,
+            }))
+            setPlans(opts)
+            setSelectedPlanIdx(opts.length > 2 ? opts.length - 1 : 0)
+            setAmount(opts.length > 2 ? opts[opts.length - 1].price : opts[0].price)
+            setPlansWarning(false)
+            return
+          }
         }
-        setPlanConfig(config)
-        setAmount(config[plan].price)
+        // Fallback to hardcoded defaults
+        const fallback: PlanOption[] = (['Daily', 'Weekly', 'Monthly'] as PlanType[]).map(p => ({
+          id: null,
+          name: p,
+          price: PLAN_DEFAULTS[p].price,
+          totalVisitsAllowed: PLAN_DEFAULTS[p].totalVisitsAllowed,
+          durationDays: PLAN_DEFAULTS[p].durationDays,
+        }))
+        setPlans(fallback)
+        setSelectedPlanIdx(2) // Monthly
+        setAmount(PLAN_DEFAULTS.Monthly.price)
+        setPlansWarning(true)
       })
-      .catch(() => {})
+      .catch(() => {
+        // Fallback to hardcoded defaults
+        const fallback: PlanOption[] = (['Daily', 'Weekly', 'Monthly'] as PlanType[]).map(p => ({
+          id: null,
+          name: p,
+          price: PLAN_DEFAULTS[p].price,
+          totalVisitsAllowed: PLAN_DEFAULTS[p].totalVisitsAllowed,
+          durationDays: PLAN_DEFAULTS[p].durationDays,
+        }))
+        setPlans(fallback)
+        setSelectedPlanIdx(2)
+        setAmount(PLAN_DEFAULTS.Monthly.price)
+        setPlansWarning(true)
+      })
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Promo code state
@@ -56,7 +108,7 @@ export function RenewModal({ open, onClose, studentId, studentName, onRenewed }:
   const [promoApplied, setPromoApplied] = useState<{ code: string; discountType: string; discountAmount: number; bonusEntries: number; id: number } | null>(null)
   const [promoError, setPromoError] = useState('')
 
-  const defaults = planConfig[plan]
+  const selectedPlan = plans[selectedPlanIdx] || { id: null, name: 'Monthly', price: 50, totalVisitsAllowed: 30, durationDays: 40 }
   const promoDiscount = promoApplied
     ? promoApplied.discountType === 'PERCENTAGE'
       ? Math.round(amountPaid * promoApplied.discountAmount) / 100
@@ -66,11 +118,11 @@ export function RenewModal({ open, onClose, studentId, studentName, onRenewed }:
     : 0
   const promoBonusEntries = promoApplied?.discountType === 'BONUS_ENTRIES' ? (promoApplied.bonusEntries || 0) : 0
   const finalAmount = Math.max(0, amountPaid - promoDiscount)
-  const totalDiscount = Math.max(0, defaults.price - finalAmount)
+  const totalDiscount = Math.max(0, selectedPlan.price - finalAmount)
 
-  const handlePlanChange = (p: PlanType) => {
-    setPlan(p)
-    setAmount(planConfig[p].price)
+  const handlePlanChange = (idx: number) => {
+    setSelectedPlanIdx(idx)
+    setAmount(plans[idx].price)
   }
 
   const handleApplyPromo = async () => {
@@ -109,11 +161,18 @@ export function RenewModal({ open, onClose, studentId, studentName, onRenewed }:
       const res = await fetch('/api/subscriptions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ studentId, planType: plan, gateway, amountPaid: finalAmount, customStartDate: startDate }),
+        body: JSON.stringify({
+          studentId,
+          planType: selectedPlan.name,
+          gateway,
+          amountPaid: finalAmount,
+          customStartDate: startDate,
+          planId: selectedPlan.id,
+        }),
       })
       if (!res.ok) {
         const d = await res.json().catch(() => ({}))
-        setError(d.error ?? 'Failed to issue subscription.')
+        setError(d.error ?? t('renew.failed'))
         return
       }
 
@@ -128,7 +187,7 @@ export function RenewModal({ open, onClose, studentId, studentName, onRenewed }:
 
         // If promo gives bonus entries, add them to the newly created subscription
         if (promoBonusEntries > 0 && subData.subscription?.id) {
-          const currentVisits = planConfig[plan].totalVisitsAllowed
+          const currentVisits = selectedPlan.totalVisitsAllowed
           fetch(`/api/subscriptions/${subData.subscription.id}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
@@ -138,14 +197,15 @@ export function RenewModal({ open, onClose, studentId, studentName, onRenewed }:
       }
 
       const expiry = new Date(startDate)
-      expiry.setDate(expiry.getDate() + planConfig[plan].durationDays)
+      expiry.setDate(expiry.getDate() + selectedPlan.durationDays)
 
       onRenewed({
         studentName,
-        plan,
+        plan: selectedPlan.name,
         amountPaid: finalAmount,
         discount: totalDiscount,
-        expiryDate: expiry.toISOString()
+        expiryDate: expiry.toISOString(),
+        receiptNumber: subData.receiptNumber || undefined,
       })
       onClose()
     } finally {
@@ -154,25 +214,30 @@ export function RenewModal({ open, onClose, studentId, studentName, onRenewed }:
   }
 
   return (
-    <Modal open={open} onClose={onClose} title={`Renew · ${studentName}`} maxWidth="max-w-lg">
+    <Modal open={open} onClose={onClose} title={`${t('renew.title')} · ${studentName}`} maxWidth="max-w-lg">
       <div className="space-y-6">
         {/* Plan selector */}
         <div className="space-y-2">
-          <label className="text-[11px] font-bold text-white/30 uppercase tracking-wider">Subscription Plan</label>
-          <div className="grid grid-cols-3 gap-3">
-            {PLANS.map((p) => (
+          <label className="text-[11px] font-bold text-white/30 uppercase tracking-wider">{t('renew.plan')}</label>
+          {plansWarning && (
+            <div className="flex items-center gap-2 text-xs text-amber-400/80 px-3 py-2 rounded-lg" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.15)' }}>
+              <AlertTriangle size={12} /> {t('renew.usingDefaults')}
+            </div>
+          )}
+          <div className={`grid gap-3 ${plans.length <= 3 ? 'grid-cols-3' : plans.length <= 4 ? 'grid-cols-4' : 'grid-cols-3'}`}>
+            {plans.map((p, idx) => (
               <button
-                key={p}
-                onClick={() => handlePlanChange(p)}
+                key={p.id ?? p.name}
+                onClick={() => handlePlanChange(idx)}
                 className={`flex flex-col items-center p-4 rounded-xl border transition-all duration-200 cursor-pointer
-                  ${plan === p
+                  ${selectedPlanIdx === idx
                     ? 'border-[#F5C518] bg-[rgba(245,197,24,0.1)] text-[#F5C518] shadow-[0_0_20px_rgba(245,197,24,0.1)] scale-[1.02]'
                     : 'border-white/10 bg-white/5 text-white/40 hover:border-white/20 hover:bg-white/8'}`}
               >
-                <span className={`font-black text-2xl ${plan === p ? 'text-[#F5C518]' : 'text-white/80'}`}>{planConfig[p].price} <span className="text-sm font-medium">JD</span></span>
-                <span className="text-sm font-semibold mt-1">{p}</span>
+                <span className={`font-black text-2xl ${selectedPlanIdx === idx ? 'text-[#F5C518]' : 'text-white/80'}`}>{p.price} <span className="text-sm font-medium">JD</span></span>
+                <span className="text-sm font-semibold mt-1">{lang === 'ar' && p.nameAr ? p.nameAr : p.name}</span>
                 <span className="text-[10px] opacity-60 mt-1.5 text-center leading-tight">
-                  {planConfig[p].totalVisitsAllowed >= 999 ? 'Unlimited' : `${planConfig[p].totalVisitsAllowed} visits`} / {planConfig[p].durationDays} days
+                  {p.totalVisitsAllowed >= 999 ? t('renew.unlimited') : `${p.totalVisitsAllowed} ${t('renew.visits')}`} / {p.durationDays} {t('renew.days')}
                 </span>
               </button>
             ))}
@@ -181,7 +246,7 @@ export function RenewModal({ open, onClose, studentId, studentName, onRenewed }:
 
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2">
-            <label className="text-[11px] font-bold text-white/30 uppercase tracking-wider">Start Date</label>
+            <label className="text-[11px] font-bold text-white/30 uppercase tracking-wider">{t('renew.startDate')}</label>
             <input
               type="date"
               value={startDate}
@@ -191,7 +256,7 @@ export function RenewModal({ open, onClose, studentId, studentName, onRenewed }:
             />
           </div>
           <div className="space-y-2">
-            <label className="text-[11px] font-bold text-white/30 uppercase tracking-wider">Payment Method</label>
+            <label className="text-[11px] font-bold text-white/30 uppercase tracking-wider">{t('renew.paymentMethod')}</label>
             <select
               value={gateway}
               onChange={(e) => setGateway(e.target.value)}
@@ -207,7 +272,7 @@ export function RenewModal({ open, onClose, studentId, studentName, onRenewed }:
         <div className="space-y-2">
           <label className="text-[11px] font-bold text-white/30 uppercase tracking-wider flex items-center gap-1.5">
             <Ticket size={12} className="text-white/25" />
-            Promo Code
+            {t('renew.promoCode')}
           </label>
           {promoApplied ? (
             <div className="flex items-center justify-between rounded-lg px-4 py-3"
@@ -217,7 +282,7 @@ export function RenewModal({ open, onClose, studentId, studentName, onRenewed }:
                 <CheckCircle2 size={16} className="text-green-400" />
                 <span className="font-mono font-bold text-sm text-green-400">{promoApplied.code}</span>
                 <span className="text-xs text-green-400/70">
-                  {promoApplied.discountType === 'PERCENTAGE' ? `${promoApplied.discountAmount}% off` : promoApplied.discountType === 'BONUS_ENTRIES' ? `+${promoApplied.bonusEntries} bonus entries` : `−${promoApplied.discountAmount} JD`}
+                  {promoApplied.discountType === 'PERCENTAGE' ? `${promoApplied.discountAmount}% ${t('renew.promoOff')}` : promoApplied.discountType === 'BONUS_ENTRIES' ? `+${promoApplied.bonusEntries} ${t('renew.bonusEntries')}` : `−${promoApplied.discountAmount} JD`}
                 </span>
               </div>
               <button onClick={handleRemovePromo} className="text-green-400/50 hover:text-red-400 transition-colors">
@@ -229,7 +294,7 @@ export function RenewModal({ open, onClose, studentId, studentName, onRenewed }:
               <input
                 value={promoInput}
                 onChange={(e) => { setPromoInput(e.target.value.toUpperCase()); setPromoError('') }}
-                placeholder="Enter promo code"
+                placeholder={t('renew.enterPromo')}
                 className="flex-1 bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-sm font-mono text-white outline-none focus:border-[#F5C518] focus:ring-1 focus:ring-[#F5C518] transition-all placeholder:text-white/20"
                 onKeyDown={(e) => { if (e.key === 'Enter') handleApplyPromo() }}
               />
@@ -238,7 +303,7 @@ export function RenewModal({ open, onClose, studentId, studentName, onRenewed }:
                 disabled={promoLoading || !promoInput.trim()}
                 className="px-4 py-2.5 bg-white/10 hover:bg-white/15 text-white text-sm font-bold rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5 border border-white/10"
               >
-                {promoLoading ? <Loader2 size={14} className="animate-spin" /> : 'Apply'}
+                {promoLoading ? <Loader2 size={14} className="animate-spin" /> : t('renew.apply')}
               </button>
             </div>
           )}
@@ -252,7 +317,7 @@ export function RenewModal({ open, onClose, studentId, studentName, onRenewed }:
         {/* Amount Paid */}
         <div className="space-y-2 p-4 rounded-xl" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
           <div className="flex justify-between items-end">
-            <label className="text-[11px] font-bold text-white/30 uppercase tracking-wider">Amount Paid (JD)</label>
+            <label className="text-[11px] font-bold text-white/30 uppercase tracking-wider">{t('renew.amountPaid')}</label>
             <div className="flex items-center gap-2">
               {promoDiscount > 0 && (
                 <span className="text-xs font-semibold text-green-400 px-2 py-0.5 rounded"
@@ -265,7 +330,7 @@ export function RenewModal({ open, onClose, studentId, studentName, onRenewed }:
                 <span className="text-xs font-semibold text-[#F5C518] px-2 py-0.5 rounded"
                   style={{ background: 'rgba(245, 197, 24, 0.1)', border: '1px solid rgba(245, 197, 24, 0.2)' }}
                 >
-                  Total Discount: {totalDiscount} JD
+                  {t('renew.totalDiscount')}: {totalDiscount} JD
                 </span>
               )}
             </div>
@@ -280,14 +345,14 @@ export function RenewModal({ open, onClose, studentId, studentName, onRenewed }:
           />
           {promoDiscount > 0 && (
             <p className="text-sm text-white/30">
-              Final charge: <span className="font-bold text-white">{finalAmount} JD</span>
+              {t('renew.finalCharge')} <span className="font-bold text-white">{finalAmount} JD</span>
               <span className="line-through text-white/20 ml-2">{amountPaid} JD</span>
             </p>
           )}
           {promoBonusEntries > 0 && (
             <p className="text-sm text-green-400 flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-green-400" />
-              +{promoBonusEntries} bonus entries will be added to subscription
+              +{promoBonusEntries} {t('renew.bonusEntriesAdded')}
             </p>
           )}
         </div>
@@ -295,10 +360,10 @@ export function RenewModal({ open, onClose, studentId, studentName, onRenewed }:
         {error && <p className="text-sm font-medium text-red-400 p-3 rounded-lg" style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)' }}>{error}</p>}
 
         <div className="flex gap-3 pt-2">
-          <Button variant="secondary" onClick={onClose} className="flex-1 py-6 bg-white/5 border-white/10 text-white hover:bg-white/10">Cancel</Button>
+          <Button variant="secondary" onClick={onClose} className="flex-1 py-6 bg-white/5 border-white/10 text-white hover:bg-white/10">{t('common.cancel')}</Button>
           <Button onClick={handleSubmit} disabled={saving} className="flex-[2] py-6 text-base font-bold shadow-lg bg-[#F5C518] hover:bg-[#D4A017] text-black">
             {saving && <Loader2 size={18} className="animate-spin mr-2" />}
-            {saving ? 'Processing...' : `Confirm ${plan} · ${finalAmount} JD`}
+            {saving ? t('renew.processing') : `${t('renew.confirm')} ${selectedPlan.name} · ${finalAmount} JD`}
           </Button>
         </div>
       </div>

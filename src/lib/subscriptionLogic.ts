@@ -17,8 +17,17 @@ export function computeExpiryDate(planType: PlanType, startDate: Date): Date {
   return d
 }
 
+/**
+ * Returns today's date as YYYY-MM-DD in the server's local timezone.
+ * Using toISOString() would return UTC which causes midnight rollover issues
+ * (e.g. 11pm local = next day in UTC).
+ */
 export function todayString(): string {
-  return new Date().toISOString().slice(0, 10)
+  const now = new Date()
+  const y = now.getFullYear()
+  const m = String(now.getMonth() + 1).padStart(2, '0')
+  const d = String(now.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
 }
 
 export function isSubscriptionActive(sub: {

@@ -1,5 +1,6 @@
 import prisma from '@/lib/prisma'
 import { requireAuth } from '@/lib/authGuard'
+import { todayString } from '@/lib/subscriptionLogic'
 
 // GET daily summary — admin only
 export async function GET() {
@@ -7,9 +8,9 @@ export async function GET() {
     const session = await requireAuth('ADMIN')
     if (session instanceof Response) return session
 
-    const today = new Date().toISOString().slice(0, 10)
-    const start = new Date(`${today}T00:00:00.000Z`)
-    const end   = new Date(`${today}T23:59:59.999Z`)
+    const today = todayString()
+    const start = new Date(`${today}T00:00:00`)
+    const end   = new Date(`${today}T23:59:59.999`)
 
     const [logs, transactions, newStudents, activeSubscriptions, baristaOrders] = await Promise.all([
       prisma.log.findMany({ where: { date: today }, include: { student: { select: { fullName: true } } } }),
@@ -27,7 +28,16 @@ export async function GET() {
     const totalRevenue = transactions.reduce((s, t) => s + t.amountPaid, 0)
     const totalDiscounts = transactions.reduce((s, t) => s + t.discountAmount, 0)
     const subscriptionRevenue = totalRevenue
-    const baristaRevenue = baristaOrders.reduce((s, o) => s + o.totalPrice, 0)
+    const baristaRevenue = baristaOrders.reduce((s, o) => s + (o.finalPrice || o.totalPrice), 0)
+    const baristaCost = baristaOrders.reduce((s, o) => s + (o.costPrice || 0), 0)
+    const baristaProfit = baristaRevenue - baristaCost
+
+    // Today's expenses
+    const todayExpenses = await prisma.cafeExpense.findMany({
+      where: { date: { gte: start, lte: end } },
+    })
+    const totalExpenses = todayExpenses.reduce((s, e) => s + e.amount, 0)
+    const netProfit = baristaProfit - totalExpenses
 
     // Peak hour calculation
     const hourCounts: Record<number, number> = {}
@@ -40,7 +50,7 @@ export async function GET() {
     // Top menu items
     const menuItemCounts: Record<string, number> = {}
     for (const o of baristaOrders) {
-      const name = o.menuItem.name
+      const name = o.menuItem?.name ?? 'Deleted Item'
       menuItemCounts[name] = (menuItemCounts[name] ?? 0) + o.quantity
     }
     const topMenuItems = Object.entries(menuItemCounts)
@@ -59,6 +69,13 @@ export async function GET() {
         barista: baristaRevenue,
         total: subscriptionRevenue + baristaRevenue,
         discounts: totalDiscounts,
+      },
+      profit: {
+        totalSales: baristaRevenue,
+        totalCost: baristaCost,
+        totalProfit: baristaProfit,
+        totalExpenses,
+        netProfit,
       },
       peakHour: peakHour ? { hour: parseInt(peakHour[0]), count: peakHour[1] } : null,
       baristaOrders: baristaOrders.length,

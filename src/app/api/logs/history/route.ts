@@ -6,7 +6,7 @@ import { isValidDateString } from '@/lib/sanitize'
 // GET — fetch logs for a specific date, or all dates grouped
 export async function GET(req: NextRequest) {
   try {
-    const session = await requireAuth('ADMIN', 'REGISTERATION_COUNTER')
+    const session = await requireAuth('ADMIN', 'STAFF')
     if (session instanceof Response) return session
 
     const date = req.nextUrl.searchParams.get('date')
@@ -20,6 +20,7 @@ export async function GET(req: NextRequest) {
           student: {
             select: { id: true, fullName: true, phone: true, major: true },
           },
+          processedByUser: { select: { name: true, email: true } },
         },
       })
       return Response.json(logs)

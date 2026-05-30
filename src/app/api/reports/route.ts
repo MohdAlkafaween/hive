@@ -24,69 +24,98 @@ export async function GET(req: NextRequest) {
     const startDate = new Date(year, month - 1, 1)
     const endDate = new Date(year, month, 0, 23, 59, 59)
 
-    // Transactions for the month
-    const transactions = await prisma.transaction.findMany({
+    // Use Prisma aggregate for revenue totals instead of loading all records into memory
+    const [
+      transactionAgg,
+      transactionCount,
+      totalCheckIns,
+      activeSubsCount,
+      newStudents,
+      newSubscriptions,
+    ] = await Promise.all([
+      prisma.transaction.aggregate({
+        where: { createdAt: { gte: startDate, lte: endDate } },
+        _sum: { amountPaid: true, discountAmount: true },
+      }),
+      prisma.transaction.count({
+        where: { createdAt: { gte: startDate, lte: endDate } },
+      }),
+      prisma.log.count({
+        where: { checkInTime: { gte: startDate, lte: endDate } },
+      }),
+      prisma.subscription.count({
+        where: { isActive: true, expiryDate: { gte: endDate } },
+      }),
+      prisma.student.count({
+        where: { createdAt: { gte: startDate, lte: endDate } },
+      }),
+      prisma.subscription.count({
+        where: { createdAt: { gte: startDate, lte: endDate } },
+      }),
+    ])
+
+    const totalRevenue = transactionAgg._sum.amountPaid || 0
+    const totalDiscounts = transactionAgg._sum.discountAmount || 0
+
+    // Revenue by gateway — use groupBy
+    const gatewayGroups = await prisma.transaction.groupBy({
+      by: ['gateway'],
       where: { createdAt: { gte: startDate, lte: endDate } },
-      include: { student: { select: { fullName: true } } },
-      orderBy: { createdAt: 'asc' },
+      _sum: { amountPaid: true },
     })
-
-    const totalRevenue = transactions.reduce((s, t) => s + t.amountPaid, 0)
-    const totalDiscounts = transactions.reduce((s, t) => s + t.discountAmount, 0)
-    const transactionCount = transactions.length
-
-    // Revenue by gateway
     const revenueByGateway: Record<string, number> = {}
-    for (const t of transactions) {
-      revenueByGateway[t.gateway] = (revenueByGateway[t.gateway] || 0) + t.amountPaid
+    for (const g of gatewayGroups) {
+      revenueByGateway[g.gateway] = g._sum.amountPaid || 0
     }
 
-    // Revenue by plan type
-    const revenueByPlan: Record<string, { count: number; revenue: number }> = {}
-    for (const t of transactions) {
-      if (!revenueByPlan[t.planType]) revenueByPlan[t.planType] = { count: 0, revenue: 0 }
-      revenueByPlan[t.planType].count++
-      revenueByPlan[t.planType].revenue += t.amountPaid
-    }
-
-    // Check-ins for the month
-    const logs = await prisma.log.findMany({
-      where: { checkInTime: { gte: startDate, lte: endDate } },
+    // Revenue by plan type — use groupBy
+    const planGroups = await prisma.transaction.groupBy({
+      by: ['planType'],
+      where: { createdAt: { gte: startDate, lte: endDate } },
+      _sum: { amountPaid: true },
+      _count: { id: true },
     })
-    const totalCheckIns = logs.length
-    const uniqueStudents = new Set(logs.map(l => l.studentId).filter(Boolean)).size
+    const revenueByPlan: Record<string, { count: number; revenue: number }> = {}
+    for (const p of planGroups) {
+      revenueByPlan[p.planType] = { count: p._count.id, revenue: p._sum.amountPaid || 0 }
+    }
 
-    // Daily breakdown
+    // Parallelize remaining queries
+    const [uniqueStudentLogs, transactions, logs, shifts] = await Promise.all([
+      // Unique students who checked in this month
+      prisma.log.findMany({
+        where: { checkInTime: { gte: startDate, lte: endDate } },
+        select: { studentId: true },
+        distinct: ['studentId'],
+      }),
+      // Daily breakdown — transactions grouped by date
+      prisma.transaction.findMany({
+        where: { createdAt: { gte: startDate, lte: endDate } },
+        select: { createdAt: true, amountPaid: true },
+      }),
+      // Daily check-ins
+      prisma.log.findMany({
+        where: { checkInTime: { gte: startDate, lte: endDate } },
+        select: { date: true },
+      }),
+      // Staff shifts this month
+      prisma.staffShift.findMany({
+        where: { date: { gte: startDate.toISOString().slice(0, 10), lte: endDate.toISOString().slice(0, 10) } },
+      }),
+    ])
+
+    const uniqueStudents = uniqueStudentLogs.filter(l => l.studentId !== null).length
+
     const dailyRevenue: Record<string, number> = {}
-    const dailyCheckIns: Record<string, number> = {}
     for (const t of transactions) {
       const d = t.createdAt.toISOString().slice(0, 10)
       dailyRevenue[d] = (dailyRevenue[d] || 0) + t.amountPaid
     }
+
+    const dailyCheckIns: Record<string, number> = {}
     for (const l of logs) {
-      const d = l.date
-      dailyCheckIns[d] = (dailyCheckIns[d] || 0) + 1
+      dailyCheckIns[l.date] = (dailyCheckIns[l.date] || 0) + 1
     }
-
-    // Active subscriptions at end of month
-    const activeSubsCount = await prisma.subscription.count({
-      where: { isActive: true, expiryDate: { gte: endDate } },
-    })
-
-    // New students this month
-    const newStudents = await prisma.student.count({
-      where: { createdAt: { gte: startDate, lte: endDate } },
-    })
-
-    // New subscriptions this month
-    const newSubscriptions = await prisma.subscription.count({
-      where: { createdAt: { gte: startDate, lte: endDate } },
-    })
-
-    // Staff shifts this month
-    const shifts = await prisma.staffShift.findMany({
-      where: { date: { gte: startDate.toISOString().slice(0, 10), lte: endDate.toISOString().slice(0, 10) } },
-    })
     const staffHoursByEmail: Record<string, number> = {}
     let totalStaffHours = 0
     for (const s of shifts) {

@@ -8,11 +8,11 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await requireAuth('ADMIN', 'REGISTERATION_COUNTER', 'BARISTA')
+    const session = await requireAuth('ADMIN', 'MANAGER', 'STAFF')
     if (session instanceof Response) return session
 
     const { id } = await params
-    if (!isValidId(Number(id))) {
+    if (!isValidId(id)) {
       return Response.json({ error: 'Invalid student ID' }, { status: 400 })
     }
 

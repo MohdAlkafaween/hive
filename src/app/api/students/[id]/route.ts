@@ -5,7 +5,7 @@ import { sanitizeString, sanitizePhone, sanitizeRfid, isValidId } from '@/lib/sa
 
 export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
-    const session = await requireAuth('ADMIN', 'REGISTERATION_COUNTER')
+    const session = await requireAuth('ADMIN', 'STAFF')
     if (session instanceof Response) return session
 
     const { id } = await ctx.params
@@ -14,7 +14,10 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
     const student = await prisma.student.findUnique({
       where: { id: Number(id) },
       include: {
-        subscriptions: { orderBy: { createdAt: 'desc' } },
+        subscriptions: {
+          orderBy: { createdAt: 'desc' },
+          include: { createdByUser: { select: { name: true, email: true } } },
+        },
         logs: { orderBy: { checkInTime: 'desc' }, take: 30 },
         transactions: { orderBy: { createdAt: 'desc' }, take: 30 },
       },
@@ -29,7 +32,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
 
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
-    const session = await requireAuth('ADMIN', 'REGISTERATION_COUNTER')
+    const session = await requireAuth('ADMIN', 'STAFF')
     if (session instanceof Response) return session
 
     const { id } = await ctx.params
@@ -52,6 +55,17 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     }
     if (body.major !== undefined) data.major = body.major ? sanitizeString(body.major) : null
     if (body.rfidUuid !== undefined) data.rfidUuid = sanitizeRfid(body.rfidUuid)
+    if (body.email !== undefined) data.email = body.email ? sanitizeString(body.email) : null
+    if (body.university !== undefined) data.university = body.university ? sanitizeString(body.university) : null
+    if (body.gender !== undefined) data.gender = body.gender && ['male', 'female'].includes(body.gender) ? body.gender : null
+    if (body.emergencyContact !== undefined) data.emergencyContact = body.emergencyContact ? sanitizeString(body.emergencyContact) : null
+    if (body.emergencyPhone !== undefined) data.emergencyPhone = body.emergencyPhone ? sanitizeString(body.emergencyPhone) : null
+    if (body.referralSource !== undefined) data.referralSource = body.referralSource ? sanitizeString(body.referralSource) : null
+    if (body.status !== undefined && ['ACTIVE', 'SUSPENDED', 'BANNED', 'GRADUATED'].includes(body.status)) data.status = body.status
+    if (body.dateOfBirth !== undefined) {
+      const dob = body.dateOfBirth ? new Date(body.dateOfBirth) : null
+      data.dateOfBirth = dob && !isNaN(dob.getTime()) ? dob : null
+    }
 
     if (Object.keys(data).length === 0) {
       return Response.json({ error: 'No valid fields to update' }, { status: 400 })

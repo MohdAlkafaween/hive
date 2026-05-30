@@ -1,10 +1,11 @@
 'use client'
-import { useState, useEffect, useCallback, Suspense } from 'react'
+import React, { useState, useEffect, useCallback, useMemo, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Search, Users, Loader2, FolderOpen, Calendar, ChevronRight } from 'lucide-react'
+import { Search, Users, Loader2, FolderOpen, Calendar, ChevronRight, ArrowUpDown, Filter, Download } from 'lucide-react'
 import { Badge } from '@/components/ui/Badge'
 import { ProfileView } from '@/components/directory/ProfileView'
+import { useI18n } from '@/lib/i18n'
 import { PageTransition } from '@/components/animations/PageTransition'
 import { AnimatedNumber } from '@/components/animations/AnimatedNumber'
 import { SkeletonTable } from '@/components/animations/SkeletonRow'
@@ -21,23 +22,33 @@ interface Student {
 }
 
 function DirectoryContent() {
+  const { t } = useI18n()
   const [students, setStudents] = useState<Student[]>([])
-  const [filtered, setFiltered]  = useState<Student[]>([])
+  const [totalStudents, setTotalStudents] = useState(0)
   const [query, setQuery]        = useState('')
   const [loading, setLoading]    = useState(true)
   const [selectedId, setSelectedId] = useState<number | null>(null)
+  const [sortBy, setSortBy] = useState<'name' | 'recent' | 'checkins'>('name')
+  const [filterSub, setFilterSub] = useState<'all' | 'active' | 'expired' | 'none'>('all')
 
   const searchParams = useSearchParams()
   const router = useRouter()
+  const debounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const fetchStudents = useCallback(async () => {
+  const fetchStudents = useCallback(async (search?: string) => {
     setLoading(true)
     try {
-      const res = await fetch('/api/students')
+      const url = search ? `/api/students?search=${encodeURIComponent(search)}` : '/api/students?limit=200'
+      const res = await fetch(url)
       if (res.ok) {
         const data = await res.json()
-        setStudents(data)
-        setFiltered(data)
+        // API returns { students, total } for paginated, or array for search
+        if (Array.isArray(data)) {
+          setStudents(data)
+        } else {
+          setStudents(data.students)
+          setTotalStudents(data.total)
+        }
       }
     } finally {
       setLoading(false)
@@ -59,13 +70,56 @@ function DirectoryContent() {
     }
   }, [])
 
+  // Debounced server-side search
   useEffect(() => {
-    if (!query.trim()) { setFiltered(students); return }
-    const q = query.toLowerCase()
-    setFiltered(students.filter(
-      (s) => s.fullName.toLowerCase().includes(q) || s.phone.includes(q) || s.major?.toLowerCase().includes(q)
-    ))
-  }, [query, students])
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    if (!query.trim()) {
+      fetchStudents()
+      return
+    }
+    debounceRef.current = setTimeout(() => {
+      fetchStudents(query.trim())
+    }, 300)
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
+  }, [query, fetchStudents])
+
+  const displayStudents = useMemo(() => {
+    let list = students.filter(s => {
+      if (filterSub === 'all') return true
+      const sub = s.subscriptions[0]
+      if (filterSub === 'none') return !sub
+      if (filterSub === 'active') return sub?.isActive && new Date(sub.expiryDate) > new Date()
+      if (filterSub === 'expired') return !sub?.isActive || (sub && new Date(sub.expiryDate) <= new Date())
+      return true
+    })
+    if (sortBy === 'name') list.sort((a, b) => a.fullName.localeCompare(b.fullName))
+    else if (sortBy === 'recent') list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    else if (sortBy === 'checkins') list.sort((a, b) => b.lifetimeCheckIns - a.lifetimeCheckIns)
+    return list
+  }, [students, sortBy, filterSub])
+
+  const handleExport = async () => {
+    const XLSX = await import('xlsx')
+    const rows = displayStudents.map(s => {
+      const sub = s.subscriptions[0]
+      const active = sub?.isActive && new Date(sub.expiryDate) > new Date()
+      return {
+        'Full Name': s.fullName,
+        'Phone': s.phone,
+        'Major': s.major || '',
+        'Status': active ? 'Active' : sub ? 'Expired' : 'No Subscription',
+        'Subscription Plan': sub?.planType || '',
+        'Expiry Date': sub ? new Date(sub.expiryDate).toLocaleDateString('en-JO') : '',
+        'Total Check-ins': s.lifetimeCheckIns,
+        'Registration Date': new Date(s.createdAt).toLocaleDateString('en-JO'),
+      }
+    })
+    const ws = XLSX.utils.json_to_sheet(rows)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Students')
+    const today = new Date().toISOString().slice(0, 10)
+    XLSX.writeFile(wb, `HIVE-Students-${today}.xlsx`)
+  }
 
   if (selectedId) {
     return (
@@ -95,9 +149,9 @@ function DirectoryContent() {
             >
               <FolderOpen size={28} className="text-black" strokeWidth={2} />
             </motion.div>
-            <h1 className="text-4xl font-black tracking-[0.2em] text-white uppercase">Directory</h1>
+            <h1 className="text-4xl font-black tracking-[0.2em] text-white uppercase">{t('dir.directory')}</h1>
           </div>
-          <p className="text-xs font-bold text-white/30 tracking-widest uppercase ml-1">Student Management</p>
+          <p className="text-xs font-bold text-white/30 tracking-widest uppercase ml-1">{t('dir.studentManagement')}</p>
         </div>
 
         <motion.div
@@ -112,23 +166,47 @@ function DirectoryContent() {
             <Users size={20} className="text-[#F5C518]" />
           </div>
           <div className="flex flex-col">
-            <span className="text-[10px] font-bold text-white/30 uppercase tracking-wider">Total Members</span>
-            <span className="text-2xl font-black text-white leading-none"><AnimatedNumber value={students.length} /></span>
+            <span className="text-[10px] font-bold text-white/30 uppercase tracking-wider">{t('dir.totalMembers')}</span>
+            <span className="text-2xl font-black text-white leading-none"><AnimatedNumber value={totalStudents || students.length} /></span>
           </div>
         </motion.div>
       </motion.header>
 
-      <div className="hive-glow-input flex items-center gap-3 rounded-xl px-5 py-4">
-        <Search size={20} className="text-[#F5C518] shrink-0" />
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search by name, phone, or major..."
-          className="flex-1 bg-transparent text-white text-lg font-medium placeholder-white/20 outline-none"
-        />
-        {query && (
-          <button onClick={() => setQuery('')} className="text-white/30 hover:text-white p-1 bg-white/5 rounded-md transition-colors">&#10005;</button>
-        )}
+      <div className="flex gap-3">
+        <div className="hive-glow-input flex items-center gap-3 rounded-xl px-5 py-4 flex-1">
+          <Search size={20} className="text-[#F5C518] shrink-0" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={t('dir.searchPlaceholder')}
+            className="flex-1 bg-transparent text-white text-lg font-medium placeholder-white/20 outline-none"
+          />
+          {query && (
+            <button onClick={() => setQuery('')} className="text-white/30 hover:text-white p-1 bg-white/5 rounded-md transition-colors">&#10005;</button>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <select value={sortBy} onChange={e => setSortBy(e.target.value as any)}
+            className="bg-white/5 border border-white/10 rounded-xl px-3 py-3 text-sm text-white focus:border-[#F5C518] outline-none cursor-pointer">
+            <option value="name">{t('dir.sortName')}</option>
+            <option value="recent">{t('dir.sortRecent')}</option>
+            <option value="checkins">{t('dir.sortCheckins')}</option>
+          </select>
+          <select value={filterSub} onChange={e => setFilterSub(e.target.value as any)}
+            className="bg-white/5 border border-white/10 rounded-xl px-3 py-3 text-sm text-white focus:border-[#F5C518] outline-none cursor-pointer">
+            <option value="all">{t('dir.filterAll')}</option>
+            <option value="active">{t('dir.filterActive')}</option>
+            <option value="expired">{t('dir.filterExpired')}</option>
+            <option value="none">{t('dir.filterNoSub')}</option>
+          </select>
+          <button
+            onClick={handleExport}
+            className="flex items-center gap-2 px-4 py-3 bg-[#F5C518] hover:bg-[#D5A711] text-black rounded-xl text-sm font-bold transition-all"
+          >
+            <Download size={16} />
+            {t('dir.exportStudents')}
+          </button>
+        </div>
       </div>
 
       <motion.div
@@ -139,11 +217,11 @@ function DirectoryContent() {
       >
         {loading ? (
           <SkeletonTable rows={6} columns={7} />
-        ) : filtered.length === 0 ? (
+        ) : displayStudents.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-white/25 gap-3">
             <Users size={48} className="opacity-20" />
             <p className="text-sm font-bold tracking-widest uppercase">
-              {query ? `No students matching "${query}"` : 'Directory is empty'}
+              {query ? `${t('dir.noMatching')} "${query}"` : t('dir.emptyDirectory')}
             </p>
           </div>
         ) : (
@@ -152,17 +230,17 @@ function DirectoryContent() {
               style={{ background: 'rgba(10,10,10,0.8)', backdropFilter: 'blur(8px)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}
             >
               <tr>
-                {['Name', 'Phone', 'Major', 'Plan', 'Check-Ins', 'Member Since', ''].map((h) => (
-                  <th key={h} className="px-5 py-4 text-[11px] font-bold text-white/30 uppercase tracking-wider">{h}</th>
+                {[t('dash.name'), t('dir.phone'), t('dir.major'), t('dir.plan'), t('dir.checkIns'), t('dir.memberSince'), ''].map((h, i) => (
+                  <th key={i} className="px-5 py-4 text-[11px] font-bold text-white/30 uppercase tracking-wider">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {filtered.map((s) => {
+              {displayStudents.map((s) => {
                 const sub = s.subscriptions[0]
                 const active = sub?.isActive && new Date(sub.expiryDate) > new Date()
 
-                let statusText = 'EXPIRED'
+                let statusText = t('dir.expired')
                 let statusColor = 'text-red-400 bg-red-500/10 border-red-500/20'
 
                 if (active) {
@@ -189,7 +267,7 @@ function DirectoryContent() {
                         </span>
                       ) : (
                         <span className="px-2.5 py-1 rounded-md text-[10px] font-bold border border-white/10 text-white/30 bg-white/3 uppercase tracking-wider">
-                          None
+                          {t('dir.none')}
                         </span>
                       )}
                     </td>

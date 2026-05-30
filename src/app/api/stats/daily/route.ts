@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import prisma from '@/lib/prisma'
 import { requireAuth } from '@/lib/authGuard'
 import { isValidDateString } from '@/lib/sanitize'
+import { todayString } from '@/lib/subscriptionLogic'
 
 export async function GET(req: NextRequest) {
   try {
@@ -10,12 +11,12 @@ export async function GET(req: NextRequest) {
     if (session instanceof Response) return session
 
     const dateParam = req.nextUrl.searchParams.get('date')
-    const today = (dateParam && isValidDateString(dateParam)) ? dateParam : new Date().toISOString().slice(0, 10)
+    const today = (dateParam && isValidDateString(dateParam)) ? dateParam : todayString()
 
-    const start = new Date(`${today}T00:00:00.000Z`)
-    const end   = new Date(`${today}T23:59:59.999Z`)
+    const start = new Date(`${today}T00:00:00`)
+    const end   = new Date(`${today}T23:59:59.999`)
 
-    const [logs, transactions] = await Promise.all([
+    const [logs, transactions, baristaOrders, expenses] = await Promise.all([
       prisma.log.findMany({
         where: { date: today },
         include: { student: { select: { fullName: true } } },
@@ -26,16 +27,50 @@ export async function GET(req: NextRequest) {
         include: { student: { select: { fullName: true } } },
         orderBy: { createdAt: 'asc' },
       }),
+      prisma.baristaOrder.findMany({
+        where: { createdAt: { gte: start, lte: end } },
+        include: { menuItem: { select: { name: true } }, student: { select: { fullName: true } } },
+        orderBy: { createdAt: 'asc' },
+      }),
+      prisma.cafeExpense.findMany({
+        where: { date: { gte: start, lte: end } },
+        orderBy: { date: 'asc' },
+      }),
     ])
 
-    const totalRevenue   = transactions.reduce((s, t) => s + t.amountPaid,    0)
-    const totalDiscounts = transactions.reduce((s, t) => s + t.discountAmount, 0)
+    const activeTx = transactions.filter(t => t.type !== 'VOID')
+    const subscriptionRevenue = activeTx.reduce((s, t) => s + t.amountPaid, 0)
+    const totalDiscounts = activeTx.filter(t => t.type === 'SALE').reduce((s, t) => s + t.discountAmount, 0)
     const totalCheckIns  = logs.length
 
+    const baristaRevenue = baristaOrders.reduce((s, o) => s + (o.finalPrice || o.totalPrice), 0)
+    const baristaCost = baristaOrders.reduce((s, o) => s + (o.costPrice || 0), 0)
+    const baristaProfit = baristaRevenue - baristaCost
+
+    const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0)
+    const totalRevenue = subscriptionRevenue + baristaRevenue
+
     const revenueByGateway: Record<string, number> = {}
-    for (const t of transactions) {
+    for (const t of activeTx) {
       revenueByGateway[t.gateway] = (revenueByGateway[t.gateway] ?? 0) + t.amountPaid
     }
+
+    // Add barista payment methods to gateway breakdown
+    for (const o of baristaOrders) {
+      const gw = o.paymentMethod === 'CASH' ? 'Cash (Café)' : 'Card (Café)'
+      revenueByGateway[gw] = (revenueByGateway[gw] ?? 0) + (o.finalPrice || o.totalPrice)
+    }
+
+    // Top menu items sold today
+    const menuItemCounts: Record<string, number> = {}
+    for (const o of baristaOrders) {
+      const itemName = o.menuItem?.name ?? 'Deleted Item'
+      menuItemCounts[itemName] = (menuItemCounts[itemName] ?? 0) + o.quantity
+    }
+    const topMenuItems = Object.entries(menuItemCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([name, count]) => ({ name, count }))
 
     return Response.json({
       date: today,
@@ -45,6 +80,34 @@ export async function GET(req: NextRequest) {
       revenueByGateway,
       transactions,
       logs,
+      // Barista data
+      baristaOrders: baristaOrders.map(o => ({
+        id: o.id,
+        menuItem: o.menuItem?.name ?? 'Deleted Item',
+        quantity: o.quantity,
+        totalPrice: o.finalPrice || o.totalPrice,
+        costPrice: o.costPrice,
+        paymentMethod: o.paymentMethod,
+        receiptNumber: o.receiptNumber,
+        student: o.student,
+        createdAt: o.createdAt,
+      })),
+      baristaRevenue,
+      baristaCost,
+      baristaProfit,
+      subscriptionRevenue,
+      topMenuItems,
+      // Expenses
+      expenses: expenses.map(e => ({
+        id: e.id,
+        description: e.description,
+        amount: e.amount,
+        category: e.category,
+        addedByName: e.addedByName,
+        createdAt: e.createdAt,
+      })),
+      totalExpenses,
+      netProfit: totalRevenue - baristaCost - totalExpenses,
     })
   } catch (e) {
     console.error('[GET /api/stats/daily]', e)

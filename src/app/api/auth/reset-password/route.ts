@@ -1,4 +1,3 @@
-import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
 import { requireAuth } from '@/lib/authGuard'
@@ -25,22 +24,22 @@ export async function POST(req: Request) {
     if (session instanceof Response) return session
 
     const body = await req.json().catch(() => null)
-    if (!body) return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
+    if (!body) return Response.json({ error: 'Invalid request body' }, { status: 400 })
 
     const { userId, newPassword } = body
 
     // Validate inputs
     if (!isValidId(userId)) {
-      return NextResponse.json({ error: 'Invalid user ID' }, { status: 400 })
+      return Response.json({ error: 'Invalid user ID' }, { status: 400 })
     }
 
     if (!newPassword || typeof newPassword !== 'string') {
-      return NextResponse.json({ error: 'New password is required' }, { status: 400 })
+      return Response.json({ error: 'New password is required' }, { status: 400 })
     }
 
     const passwordCheck = isStrongPassword(newPassword)
     if (!passwordCheck.valid) {
-      return NextResponse.json({ error: passwordCheck.reason }, { status: 400 })
+      return Response.json({ error: passwordCheck.reason }, { status: 400 })
     }
 
     // Verify target user exists
@@ -50,7 +49,7 @@ export async function POST(req: Request) {
     })
 
     if (!targetUser) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 })
+      return Response.json({ error: 'User not found' }, { status: 404 })
     }
 
     // Hash new password with bcrypt 12 rounds
@@ -82,11 +81,11 @@ export async function POST(req: Request) {
 
     console.log(`[AUDIT] PASSWORD_RESET: admin=${adminEmail} target=${targetUser.email} self=${isSelf} ip=${ip}`)
 
-    return NextResponse.json({
+    return Response.json({
       message: `Password reset successfully for ${targetUser.email}`,
     })
   } catch (e) {
     console.error('[POST /api/auth/reset-password]', e)
-    return NextResponse.json({ error: 'Failed to reset password' }, { status: 500 })
+    return Response.json({ error: 'Failed to reset password' }, { status: 500 })
   }
 }

@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import prisma from '@/lib/prisma'
 import { requireAuth } from '@/lib/authGuard'
 import { isValidDateString } from '@/lib/sanitize'
+import { todayString } from '@/lib/subscriptionLogic'
 
 export async function GET(req: NextRequest) {
   try {
@@ -9,9 +10,9 @@ export async function GET(req: NextRequest) {
     if (session instanceof Response) return session
 
     const dateParam = req.nextUrl.searchParams.get('date')
-    const today = (dateParam && isValidDateString(dateParam)) ? dateParam : new Date().toISOString().slice(0, 10)
-    const start = new Date(`${today}T00:00:00.000Z`)
-    const end   = new Date(`${today}T23:59:59.999Z`)
+    const today = (dateParam && isValidDateString(dateParam)) ? dateParam : todayString()
+    const start = new Date(`${today}T00:00:00`)
+    const end   = new Date(`${today}T23:59:59.999`)
 
     const transactions = await prisma.transaction.findMany({
       where: { createdAt: { gte: start, lte: end } },

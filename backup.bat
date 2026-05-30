@@ -8,10 +8,14 @@ setlocal
 
 :: Source database (relative to script location)
 set SCRIPT_DIR=%~dp0
-set SOURCE=%SCRIPT_DIR%dev.db
+set SOURCE=%SCRIPT_DIR%prisma\dev.db
 
-:: Destination folder — update this path to your Google Drive or OneDrive
-set BACKUP_DIR=C:\Users\moham\OneDrive\HIVE_Backups
+:: Destination folder — uses BACKUP_DIR env var if set, otherwise defaults to script's backups subfolder
+if defined BACKUP_DIR (
+    set BACKUP_DIR=%BACKUP_DIR%
+) else (
+    set BACKUP_DIR=%SCRIPT_DIR%backups
+)
 
 :: Build date string YYYY-MM-DD (compatible with all Windows locales)
 for /f "tokens=2 delims==" %%I in ('wmic os get localdatetime /value') do set DATETIME=%%I

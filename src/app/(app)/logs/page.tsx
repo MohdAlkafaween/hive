@@ -2,11 +2,13 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
+import { todayString } from '@/lib/subscriptionLogic'
 import {
   CalendarDays, Clock, Coffee, Loader2, ChevronLeft, ChevronRight,
   User, Phone, LogIn, LogOut, DollarSign, Search, Trash2, AlertTriangle
 } from 'lucide-react'
 import { PageTransition } from '@/components/animations/PageTransition'
+import { useI18n } from '@/lib/i18n'
 import { AnimatedTabs } from '@/components/animations/AnimatedTabs'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { ExportButton } from '@/components/shared/ExportButton'
@@ -31,6 +33,7 @@ interface BaristaLog {
 }
 
 export default function LogsPage() {
+  const { t } = useI18n()
   const router = useRouter()
   const [tab, setTab] = useState<LogTab>('checkins')
   const [dates, setDates] = useState<DateEntry[]>([])
@@ -99,8 +102,8 @@ export default function LogsPage() {
   }
 
   const handleDeleteLog = (logId: number) => {
-    setConfirmTitle('Delete Log')
-    setConfirmMessage('Are you sure you want to permanently delete this check-in log? This cannot be undone.')
+    setConfirmTitle(t('logs.deleteLog'))
+    setConfirmMessage(t('logs.deleteLogMsg'))
     setConfirmAction(() => async () => {
       setDeleting(logId)
       try {
@@ -115,8 +118,8 @@ export default function LogsPage() {
 
   const handleBulkErase = () => {
     if (!eraseFrom || !eraseTo) return
-    setConfirmTitle('Bulk Erase Logs')
-    setConfirmMessage(`Permanently delete ALL check-in logs from ${eraseFrom} to ${eraseTo}. This action cannot be undone.`)
+    setConfirmTitle(t('logs.bulkErase'))
+    setConfirmMessage(t('logs.bulkEraseMsg').replace('{from}', eraseFrom).replace('{to}', eraseTo))
     setConfirmAction(() => async () => {
       setConfirmOpen(false)
       setErasing(true)
@@ -129,23 +132,23 @@ export default function LogsPage() {
         })
         const data = await res.json()
         if (res.ok) {
-          setEraseResult(`Successfully deleted ${data.deleted} log${data.deleted !== 1 ? 's' : ''}.`)
+          setEraseResult(data.deleted === 1 ? t('logs.successDeletedOne') : t('logs.successDeleted').replace('{n}', String(data.deleted)))
           setSelectedDate(null)
           setCheckInLogs([])
           fetchDates()
         } else {
-          setEraseResult(data.error || 'Failed to delete logs.')
+          setEraseResult(data.error || t('logs.failedDelete'))
         }
       } catch {
-        setEraseResult('Connection error.')
+        setEraseResult(t('logs.connectionError'))
       } finally { setErasing(false) }
     })
     setConfirmOpen(true)
   }
 
   const handleEraseAll = () => {
-    setConfirmTitle('Erase ALL Logs')
-    setConfirmMessage('This will permanently delete ALL check-in logs from every date. This action is irreversible. Are you absolutely sure?')
+    setConfirmTitle(t('logs.eraseAllTitle'))
+    setConfirmMessage(t('logs.eraseAllMsg'))
     setConfirmAction(() => async () => {
       setConfirmOpen(false)
       setErasing(true)
@@ -158,15 +161,15 @@ export default function LogsPage() {
         })
         const data = await res.json()
         if (res.ok) {
-          setEraseResult(`Successfully deleted ${data.deleted} log${data.deleted !== 1 ? 's' : ''}.`)
+          setEraseResult(data.deleted === 1 ? t('logs.successDeletedOne') : t('logs.successDeleted').replace('{n}', String(data.deleted)))
           setSelectedDate(null)
           setCheckInLogs([])
           fetchDates()
         } else {
-          setEraseResult(data.error || 'Failed to delete logs.')
+          setEraseResult(data.error || t('logs.failedDelete'))
         }
       } catch {
-        setEraseResult('Connection error.')
+        setEraseResult(t('logs.connectionError'))
       } finally { setErasing(false) }
     })
     setConfirmOpen(true)
@@ -175,7 +178,7 @@ export default function LogsPage() {
   const fmt = (iso: string) => new Date(iso).toLocaleTimeString('en-JO', { hour: '2-digit', minute: '2-digit' })
   const fmtDate = (d: string) => new Date(d + 'T12:00:00').toLocaleDateString('en-JO', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })
 
-  const today = new Date().toISOString().slice(0, 10)
+  const today = todayString()
 
   const logsByHour = checkInLogs.reduce<Record<string, CheckInLog[]>>((acc, log) => {
     const hour = new Date(log.checkInTime).getHours()
@@ -221,8 +224,8 @@ export default function LogsPage() {
             <CalendarDays size={20} className="text-black" />
           </motion.div>
           <div>
-            <h1 className="text-xl font-bold text-white">Activity Logs</h1>
-            <p className="text-xs text-white/30">Full history of check-ins and barista orders</p>
+            <h1 className="text-xl font-bold text-white">{t('logs.activityLogs')}</h1>
+            <p className="text-xs text-white/30">{t('logs.fullHistory')}</p>
           </div>
         </div>
 
@@ -237,7 +240,7 @@ export default function LogsPage() {
             }`}
           >
             <Trash2 size={14} />
-            Erase Logs
+            {t('logs.eraseLogs')}
           </button>
         )}
       </motion.div>
@@ -257,14 +260,14 @@ export default function LogsPage() {
             >
               <div className="flex items-center gap-2 mb-4">
                 <AlertTriangle size={16} className="text-red-400" />
-                <h3 className="text-sm font-bold text-red-400">Bulk Erase Check-In Logs</h3>
+                <h3 className="text-sm font-bold text-red-400">{t('logs.bulkErase')}</h3>
               </div>
               <p className="text-xs text-white/30 mb-4">
-                Permanently delete all check-in logs within a date range. This action cannot be undone.
+                {t('logs.bulkEraseDesc')}
               </p>
               <div className="flex flex-wrap items-end gap-4">
                 <div>
-                  <label className="block text-[10px] font-bold text-white/30 uppercase tracking-wider mb-1.5">From Date</label>
+                  <label className="block text-[10px] font-bold text-white/30 uppercase tracking-wider mb-1.5">{t('logs.fromDate')}</label>
                   <input
                     type="date"
                     value={eraseFrom}
@@ -273,7 +276,7 @@ export default function LogsPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold text-white/30 uppercase tracking-wider mb-1.5">To Date</label>
+                  <label className="block text-[10px] font-bold text-white/30 uppercase tracking-wider mb-1.5">{t('logs.toDate')}</label>
                   <input
                     type="date"
                     value={eraseTo}
@@ -287,7 +290,7 @@ export default function LogsPage() {
                   className="px-5 py-2 rounded-xl text-sm font-bold bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30 transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
                 >
                   {erasing ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-                  {erasing ? 'Erasing...' : 'Erase Range'}
+                  {erasing ? t('logs.erasing') : t('logs.eraseRange')}
                 </button>
                 <button
                   onClick={handleEraseAll}
@@ -295,7 +298,7 @@ export default function LogsPage() {
                   className="px-5 py-2 rounded-xl text-sm font-bold bg-red-600/30 text-red-300 border border-red-500/40 hover:bg-red-600/50 transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
                 >
                   <Trash2 size={14} />
-                  Erase All
+                  {t('logs.eraseAll')}
                 </button>
               </div>
               {eraseResult && (
@@ -311,8 +314,8 @@ export default function LogsPage() {
       {/* Tab switcher */}
       <AnimatedTabs
         tabs={[
-          { id: 'checkins', label: 'Check-In Logs', icon: <LogIn size={16} /> },
-          { id: 'barista', label: 'Barista Logs', icon: <Coffee size={16} /> },
+          { id: 'checkins', label: t('logs.checkInLogs'), icon: <LogIn size={16} /> },
+          { id: 'barista', label: t('logs.baristaLogs'), icon: <Coffee size={16} /> },
         ]}
         activeTab={tab}
         onChange={(id) => setTab(id as LogTab)}
@@ -323,9 +326,9 @@ export default function LogsPage() {
         <div className="hive-card !rounded-2xl !p-0 overflow-hidden flex flex-col max-h-[70vh]">
           <div className="p-4" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.02)' }}>
             <h2 className="text-xs font-bold text-white/40 uppercase tracking-widest">
-              {tab === 'checkins' ? 'Check-In Days' : 'Order Days'}
+              {tab === 'checkins' ? t('logs.checkInDays') : t('logs.orderDays')}
             </h2>
-            <p className="text-xs text-white/20 mt-0.5">{dates.length} days recorded</p>
+            <p className="text-xs text-white/20 mt-0.5">{dates.length} {t('logs.daysRecorded')}</p>
           </div>
 
           <div className="flex-1 overflow-y-auto">
@@ -336,7 +339,7 @@ export default function LogsPage() {
             ) : dates.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-white/20">
                 <CalendarDays size={32} className="mb-2 opacity-40" />
-                <p className="text-sm font-medium">No logs recorded yet</p>
+                <p className="text-sm font-medium">{t('logs.noLogsYet')}</p>
               </div>
             ) : (
               <div>
@@ -360,7 +363,7 @@ export default function LogsPage() {
                             <span className="ml-2 text-[10px] font-bold text-[#F5C518] px-1.5 py-0.5 rounded"
                               style={{ background: 'rgba(245, 197, 24, 0.1)', border: '1px solid rgba(245, 197, 24, 0.2)' }}
                             >
-                              TODAY
+                              {t('common.today')}
                             </span>
                           )}
                         </p>
@@ -389,8 +392,8 @@ export default function LogsPage() {
           {!selectedDate ? (
             <div className="flex-1 flex flex-col items-center justify-center text-white/20 p-8">
               <ChevronLeft size={32} className="mb-2 opacity-40" />
-              <p className="text-sm font-medium">Select a day to view logs</p>
-              <p className="text-xs mt-1 text-white/15">Click on any date from the left panel</p>
+              <p className="text-sm font-medium">{t('logs.selectDay')}</p>
+              <p className="text-xs mt-1 text-white/15">{t('logs.clickDate')}</p>
             </div>
           ) : (
             <>
@@ -400,8 +403,8 @@ export default function LogsPage() {
                     <h2 className="text-sm font-bold text-white">{fmtDate(selectedDate)}</h2>
                     <p className="text-xs text-white/25 mt-0.5">
                       {tab === 'checkins'
-                        ? `${checkInLogs.length} check-in${checkInLogs.length !== 1 ? 's' : ''}`
-                        : `${baristaLogs.length} order${baristaLogs.length !== 1 ? 's' : ''}`
+                        ? `${checkInLogs.length} ${checkInLogs.length !== 1 ? t('logs.checkIns') : t('logs.checkIn')}`
+                        : `${baristaLogs.length} ${baristaLogs.length !== 1 ? t('logs.orders') : t('logs.order')}`
                       }
                     </p>
                   </div>
@@ -411,7 +414,7 @@ export default function LogsPage() {
                       <input
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        placeholder={tab === 'checkins' ? 'Search student...' : 'Search item...'}
+                        placeholder={tab === 'checkins' ? t('logs.searchStudent') : t('logs.searchItem')}
                         className="pl-8 pr-3 py-2 text-sm bg-white/5 border border-white/10 rounded-lg focus:border-[#F5C518] focus:outline-none focus:shadow-[0_0_0_3px_rgba(245,197,24,0.12)] w-48 text-white placeholder-white/20 transition-all"
                       />
                     </div>
@@ -442,7 +445,7 @@ export default function LogsPage() {
                   filteredHours.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-16 text-white/20">
                       <LogIn size={32} className="mb-2 opacity-40" />
-                      <p className="text-sm font-medium">No check-ins found</p>
+                      <p className="text-sm font-medium">{t('logs.noCheckIns')}</p>
                     </div>
                   ) : (
                     <div>
@@ -475,7 +478,7 @@ export default function LogsPage() {
                                       {log.student!.fullName}
                                     </button>
                                   ) : (
-                                    <span className="font-bold text-sm text-white/40 truncate block">{log.studentName || 'Deleted Student'}</span>
+                                    <span className="font-bold text-sm text-white/40 truncate block">{log.studentName || t('dash.deletedStudent')}</span>
                                   )}
                                   <div className="flex items-center gap-2 mt-0.5">
                                     {log.student?.phone && (
@@ -487,7 +490,7 @@ export default function LogsPage() {
                                     {log.student?.major && (
                                       <span className="text-xs text-white/25">{log.student.major}</span>
                                     )}
-                                    {!log.student && <span className="text-[10px] text-red-400/50">account deleted</span>}
+                                    {!log.student && <span className="text-[10px] text-red-400/50">{t('dash.accountDeleted')}</span>}
                                   </div>
                                 </div>
                               </div>
@@ -506,7 +509,7 @@ export default function LogsPage() {
                                   <span className="text-[10px] font-bold text-[#F5C518] px-2 py-0.5 rounded"
                                     style={{ background: 'rgba(245, 197, 24, 0.08)', border: '1px solid rgba(245, 197, 24, 0.15)' }}
                                   >
-                                    No checkout
+                                    {t('logs.noCheckout')}
                                   </span>
                                 )}
 
@@ -532,7 +535,7 @@ export default function LogsPage() {
                   filteredBarista.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-16 text-white/20">
                       <Coffee size={32} className="mb-2 opacity-40" />
-                      <p className="text-sm font-medium">No orders found</p>
+                      <p className="text-sm font-medium">{t('logs.noOrders')}</p>
                     </div>
                   ) : (
                     <div>
@@ -540,7 +543,7 @@ export default function LogsPage() {
                         <div className="flex items-center gap-2">
                           <DollarSign size={14} className="text-green-400" />
                           <span className="text-sm font-bold text-green-400">
-                            Day Total: {filteredBarista.reduce((s, o) => s + o.totalPrice, 0).toFixed(2)} JD
+                            {t('logs.dayTotal')}: {filteredBarista.reduce((s, o) => s + o.totalPrice, 0).toFixed(2)} JD
                           </span>
                           <span className="text-xs text-green-400/50">({filteredBarista.length} orders)</span>
                         </div>
@@ -588,7 +591,7 @@ export default function LogsPage() {
       onConfirm={confirmAction || (async () => {})}
       title={confirmTitle}
       message={confirmMessage}
-      confirmLabel="Delete"
+      confirmLabel={t('common.delete')}
       variant="danger"
     />
     </PageTransition>

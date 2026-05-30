@@ -6,7 +6,7 @@ import { isValidId } from '@/lib/sanitize'
 // POST — freeze or unfreeze a subscription
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const session = await requireAuth('ADMIN', 'REGISTERATION_COUNTER')
+    const session = await requireAuth('ADMIN', 'STAFF')
     if (session instanceof Response) return session
     const { id } = await params
     if (!isValidId(id)) return Response.json({ error: 'Valid subscription ID required' }, { status: 400 })
@@ -20,6 +20,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     if (body.action === 'freeze') {
       if (sub.isFrozen) return Response.json({ error: 'Already frozen' }, { status: 400 })
+
+      // Enforce maximum cumulative freeze duration (configurable, default 30 days)
+      const maxFreezeSetting = await prisma.appSetting.findUnique({ where: { key: 'maxFreezeDays' } })
+      const maxFreezeDays = maxFreezeSetting ? parseInt(maxFreezeSetting.value) : 30
+      if (sub.freezeDays >= maxFreezeDays) {
+        return Response.json({ error: `Maximum freeze duration exceeded (${maxFreezeDays} days)` }, { status: 400 })
+      }
 
       const updated = await prisma.subscription.update({
         where: { id: Number(id) },

@@ -30,8 +30,10 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
+# env files — never commit secrets
+.env
+.env.local
+.env.*.local
 
 # vercel
 .vercel
@@ -51,3 +53,7 @@ next-env.d.ts
 # User uploads & pentest output
 /public/uploads/
 /pentest-results/
+
+# Backup directories
+/backups/
+/prisma/backups/

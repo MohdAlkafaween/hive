@@ -1,10 +1,15 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Trash2, ToggleLeft, ToggleRight, Loader2, Tag, Users, Shield, Ticket, Calendar, Hash, Percent, DollarSign, ChevronDown, ChevronUp, User, KeyRound, ClipboardList, LogIn, LogOut, Eye, EyeOff, ChevronLeft, ChevronRight, Filter, ArrowLeft, Phone, Mail, Clock, Edit3, Save, X, UserX, UserCheck as UserCheckIcon, CalendarDays, Database, Download, Upload, HardDrive, Monitor } from 'lucide-react'
+import { Plus, Trash2, ToggleLeft, ToggleRight, Loader2, Tag, Users, Shield, Ticket, Calendar, Hash, Percent, DollarSign, ChevronDown, ChevronUp, User, KeyRound, ClipboardList, LogIn, LogOut, Eye, EyeOff, ChevronLeft, ChevronRight, Filter, ArrowLeft, Phone, Mail, Clock, Edit3, Save, X, UserX, UserCheck as UserCheckIcon, CalendarDays, Database, Download, Upload, HardDrive, Monitor, Banknote } from 'lucide-react'
+import { RegistersSection } from '@/components/admin/RegistersSection'
+import { PlansSection } from '@/components/admin/PlansSection'
 import { PageTransition } from '@/components/animations/PageTransition'
+import { todayString } from '@/lib/subscriptionLogic'
+import { useI18n } from '@/lib/i18n'
 import { AnimatedTabs } from '@/components/animations/AnimatedTabs'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
+import { useToast } from '@/components/ui/Toast'
 
 interface PromoUsage {
   id: number
@@ -78,9 +83,10 @@ interface ShiftEntry {
   clockOut: string | null
 }
 
-type ActiveTab = 'promos' | 'users' | 'audit' | 'shifts' | 'backup'
+type ActiveTab = 'promos' | 'users' | 'audit' | 'shifts' | 'registers' | 'backup' | 'plans' | 'settings'
 
 export default function AdminPage() {
+  const { t } = useI18n()
   const [tab, setTab] = useState<ActiveTab>('promos')
 
   return (
@@ -101,19 +107,22 @@ export default function AdminPage() {
           <Shield size={20} className="text-black" />
         </motion.div>
         <div>
-          <h1 className="text-xl font-bold text-white">Admin Panel</h1>
-          <p className="text-xs text-white/25">Manage promo codes, staff accounts, and audit trail</p>
+          <h1 className="text-xl font-bold text-white">{t('admin.title')}</h1>
+          <p className="text-xs text-white/25">{t('admin.manageDesc')}</p>
         </div>
       </motion.div>
 
       {/* Tab switcher */}
       <AnimatedTabs
         tabs={[
-          { id: 'promos', label: 'Promo Codes', icon: <Ticket size={16} /> },
-          { id: 'users', label: 'Staff & Passwords', icon: <KeyRound size={16} /> },
-          { id: 'shifts', label: 'Staff Shifts', icon: <Clock size={16} /> },
-          { id: 'audit', label: 'Audit Log', icon: <ClipboardList size={16} /> },
-          { id: 'backup', label: 'Backup', icon: <Database size={16} /> },
+          { id: 'promos', label: t('admin.promoCodes'), icon: <Ticket size={16} /> },
+          { id: 'users', label: t('admin.staffPasswords'), icon: <KeyRound size={16} /> },
+          { id: 'shifts', label: t('admin.staffShifts'), icon: <Clock size={16} /> },
+          { id: 'audit', label: t('admin.auditLog'), icon: <ClipboardList size={16} /> },
+          { id: 'registers', label: t('register.history'), icon: <Banknote size={16} /> },
+          { id: 'backup', label: t('admin.backup'), icon: <Database size={16} /> },
+          { id: 'plans', label: t('admin.plans'), icon: <Tag size={16} /> },
+          { id: 'settings', label: t('admin.settings'), icon: <Monitor size={16} /> },
         ]}
         activeTab={tab}
         onChange={(id) => setTab(id as ActiveTab)}
@@ -123,7 +132,10 @@ export default function AdminPage() {
       {tab === 'users' && <UsersSection />}
       {tab === 'shifts' && <ShiftsSection />}
       {tab === 'audit' && <AuditLogSection />}
+      {tab === 'registers' && <RegistersSection />}
       {tab === 'backup' && <BackupSection />}
+      {tab === 'plans' && <PlansSection />}
+      {tab === 'settings' && <SettingsSection />}
     </div>
     </PageTransition>
   )
@@ -131,6 +143,7 @@ export default function AdminPage() {
 
 /* ======================== STAFF AUDIT LOG SECTION ======================== */
 function AuditLogSection() {
+  const { t } = useI18n()
   const [logs, setLogs] = useState<AuditLogEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(1)
@@ -178,21 +191,19 @@ function AuditLogSection() {
   const roleColors: Record<string, string> = {
     ADMIN: 'text-red-400',
     MANAGER: 'text-amber-400',
-    BARISTA: 'text-purple-400',
-    REGISTERATION_COUNTER: 'text-blue-400',
+    STAFF: 'text-blue-400',
   }
   const roleBgs: Record<string, string> = {
     ADMIN: 'rgba(239, 68, 68, 0.1)',
     MANAGER: 'rgba(245, 158, 11, 0.1)',
-    BARISTA: 'rgba(168, 85, 247, 0.1)',
-    REGISTERATION_COUNTER: 'rgba(59, 130, 246, 0.1)',
+    STAFF: 'rgba(59, 130, 246, 0.1)',
   }
 
   return (
     <div className="space-y-4">
       {/* Filters */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
-        <p className="text-sm text-white/30">{total} audit event{total !== 1 ? 's' : ''} recorded</p>
+        <p className="text-sm text-white/30">{total} {t('admin.auditLog')}</p>
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
             <Filter size={14} className="text-white/20" />
@@ -202,10 +213,10 @@ function AuditLogSection() {
               className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-[#F5C518] outline-none transition-all"
               style={{ colorScheme: 'dark' }}
             >
-              <option value="">All Events</option>
-              <option value="LOGIN">Logins</option>
-              <option value="LOGOUT">Logouts</option>
-              <option value="PASSWORD_RESET_BY_ADMIN">Password Resets</option>
+              <option value="">{t('admin.allEvents')}</option>
+              <option value="LOGIN">{t('admin.logins')}</option>
+              <option value="LOGOUT">{t('admin.logouts')}</option>
+              <option value="PASSWORD_RESET_BY_ADMIN">{t('admin.passwordResets')}</option>
             </select>
           </div>
           <select
@@ -214,9 +225,9 @@ function AuditLogSection() {
             className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-[#F5C518] outline-none transition-all"
             style={{ colorScheme: 'dark' }}
           >
-            <option value="">All Staff</option>
+            <option value="">{t('admin.allStaff')}</option>
             {staffList.map((s) => (
-              <option key={s.id} value={s.id}>{s.email} ({s.role === 'REGISTERATION_COUNTER' ? 'Counter' : s.role})</option>
+              <option key={s.id} value={s.id}>{s.email} ({s.role === 'STAFF' ? t('admin.staff') : s.role})</option>
             ))}
           </select>
         </div>
@@ -228,8 +239,8 @@ function AuditLogSection() {
       ) : logs.length === 0 ? (
         <div className="text-center py-16 text-white/25">
           <ClipboardList size={40} className="mx-auto mb-3 opacity-40" />
-          <p className="text-sm font-medium">No audit events found</p>
-          <p className="text-xs text-white/20">Staff login/logout activity will appear here</p>
+          <p className="text-sm font-medium">{t('admin.noAuditEvents')}</p>
+          <p className="text-xs text-white/20">{t('admin.auditDesc')}</p>
         </div>
       ) : (
         <div className="hive-card !rounded-2xl !p-0 overflow-hidden">
@@ -237,8 +248,8 @@ function AuditLogSection() {
             <table className="w-full text-sm text-left">
               <thead className="sticky top-0 z-10" style={{ background: 'rgba(10,10,10,0.95)', backdropFilter: 'blur(8px)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
                 <tr>
-                  {['Event', 'Staff Member', 'Role', 'IP Address', 'Details', 'Time'].map((h) => (
-                    <th key={h} className="px-5 py-4 text-[10px] font-bold text-white/30 uppercase tracking-wider">{h}</th>
+                  {[t('admin.event'), t('admin.staffMember'), t('admin.role'), t('admin.ipAddress'), t('admin.details'), t('admin.time')].map((h, i) => (
+                    <th key={i} className="px-5 py-4 text-[10px] font-bold text-white/30 uppercase tracking-wider">{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -267,7 +278,7 @@ function AuditLogSection() {
                         <span className={`px-2 py-1 rounded-md text-[10px] font-bold ${roleColors[log.role] || 'text-white/40'}`}
                           style={{ background: roleBgs[log.role] || 'rgba(255,255,255,0.05)' }}
                         >
-                          {log.role === 'REGISTERATION_COUNTER' ? 'Counter' : log.role}
+                          {log.role === 'STAFF' ? t('admin.staff') : log.role}
                         </span>
                       </td>
                       <td className="px-5 py-4 font-mono text-xs text-white/25">{log.ip}</td>
@@ -288,7 +299,7 @@ function AuditLogSection() {
           {/* Pagination */}
           {totalPages > 1 && (
             <div className="flex items-center justify-between px-5 py-3" style={{ borderTop: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.02)' }}>
-              <span className="text-xs text-white/25">Page {page} of {totalPages} ({total} total)</span>
+              <span className="text-xs text-white/25">{t('admin.page')} {page} {t('admin.of')} {totalPages} ({total} {t('admin.total')})</span>
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => setPage(p => Math.max(1, p - 1))}
@@ -315,6 +326,7 @@ function AuditLogSection() {
 
 /* ======================== PROMO CODES SECTION ======================== */
 function PromoSection() {
+  const { t } = useI18n()
   const [promos, setPromos] = useState<PromoCode[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -340,9 +352,9 @@ function PromoSection() {
   useEffect(() => { fetchPromos() }, [fetchPromos])
 
   const handleCreate = async () => {
-    if (!code.trim()) { setError('Code is required'); return }
-    if (discountType === 'BONUS_ENTRIES' && (!bonusEntries || Number(bonusEntries) <= 0)) { setError('Bonus entries amount is required'); return }
-    if (discountType !== 'BONUS_ENTRIES' && !discount) { setError('Discount amount is required'); return }
+    if (!code.trim()) { setError(t('admin.code') + ' *'); return }
+    if (discountType === 'BONUS_ENTRIES' && (!bonusEntries || Number(bonusEntries) <= 0)) { setError(t('admin.bonusEntries') + ' *'); return }
+    if (discountType !== 'BONUS_ENTRIES' && !discount) { setError(t('admin.amount') + ' *'); return }
     setSaving(true); setError('')
     try {
       const res = await fetch('/api/promo', {
@@ -391,13 +403,13 @@ function PromoSection() {
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
-        <p className="text-sm text-white/30">{promos.length} promo code{promos.length !== 1 ? 's' : ''}</p>
+        <p className="text-sm text-white/30">{promos.length} {t('admin.promoCodes')}</p>
         <button
           onClick={() => setShowForm(!showForm)}
           className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#F5C518] hover:bg-[#D5A711] text-black font-bold text-sm transition-all"
         >
           <Plus size={16} />
-          New Promo Code
+          {t('admin.newPromo')}
         </button>
       </div>
 
@@ -412,12 +424,12 @@ function PromoSection() {
         >
           <h3 className="text-sm font-bold text-white flex items-center gap-2">
             <Tag size={16} className="text-[#F5C518]" />
-            Create Promo Code
+            {t('admin.createPromo')}
           </h3>
 
           <div className="grid grid-cols-2 gap-4 mt-4">
             <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-white/30 uppercase tracking-wider">Code *</label>
+              <label className="text-[10px] font-bold text-white/30 uppercase tracking-wider">{t('admin.code')} *</label>
               <input
                 value={code}
                 onChange={(e) => setCode(e.target.value.toUpperCase())}
@@ -427,7 +439,7 @@ function PromoSection() {
             </div>
 
             <div className="space-y-1.5 col-span-2">
-              <label className="text-[10px] font-bold text-white/30 uppercase tracking-wider">Discount Type *</label>
+              <label className="text-[10px] font-bold text-white/30 uppercase tracking-wider">{t('admin.discountType')} *</label>
               <div className="flex rounded-lg border border-white/10 overflow-hidden">
                 <button
                   type="button"
@@ -439,7 +451,7 @@ function PromoSection() {
                   }`}
                 >
                   <DollarSign size={14} />
-                  Amount
+                  {t('admin.amount')}
                 </button>
                 <button
                   type="button"
@@ -451,7 +463,7 @@ function PromoSection() {
                   }`}
                 >
                   <Percent size={14} />
-                  Percentage
+                  {t('admin.percentage')}
                 </button>
                 <button
                   type="button"
@@ -463,14 +475,14 @@ function PromoSection() {
                   }`}
                 >
                   <Plus size={14} />
-                  Entries
+                  {t('admin.entries')}
                 </button>
               </div>
             </div>
 
             {discountType === 'BONUS_ENTRIES' ? (
               <div className="space-y-1.5">
-                <label className="text-[10px] font-bold text-white/30 uppercase tracking-wider">Bonus Entries *</label>
+                <label className="text-[10px] font-bold text-white/30 uppercase tracking-wider">{t('admin.bonusEntries')} *</label>
                 <input
                   type="number"
                   value={bonusEntries}
@@ -481,12 +493,12 @@ function PromoSection() {
                   step="1"
                   className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white focus:border-[#F5C518] focus:outline-none focus:ring-1 focus:ring-[#F5C518] placeholder:text-white/20"
                 />
-                <p className="text-[10px] text-white/20">Extra visits added to subscription when used</p>
+                <p className="text-[10px] text-white/20">{t('admin.bonusEntriesDesc')}</p>
               </div>
             ) : (
               <div className="space-y-1.5">
                 <label className="text-[10px] font-bold text-white/30 uppercase tracking-wider">
-                  {discountType === 'PERCENTAGE' ? 'Discount (%) *' : 'Discount (JD) *'}
+                  {discountType === 'PERCENTAGE' ? `${t('admin.discountPct')} *` : `${t('admin.discountJd')} *`}
                 </label>
                 <input
                   type="number"
@@ -501,7 +513,7 @@ function PromoSection() {
               </div>
             )}
             <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-white/30 uppercase tracking-wider">Max Uses (0 = unlimited)</label>
+              <label className="text-[10px] font-bold text-white/30 uppercase tracking-wider">{t('admin.maxUses')}</label>
               <input
                 type="number"
                 value={maxUses}
@@ -511,7 +523,7 @@ function PromoSection() {
               />
             </div>
             <div className="space-y-1.5 col-span-2">
-              <label className="text-[10px] font-bold text-white/30 uppercase tracking-wider">Expires At (optional)</label>
+              <label className="text-[10px] font-bold text-white/30 uppercase tracking-wider">{t('admin.expiresAt')}</label>
               <input
                 type="date"
                 value={expiresAt}
@@ -526,11 +538,11 @@ function PromoSection() {
 
           <div className="flex gap-3 pt-4 mt-4" style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>
             <button onClick={() => setShowForm(false)} className="px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-white font-medium text-sm hover:bg-white/10 transition-all">
-              Cancel
+              {t('common.cancel')}
             </button>
             <button onClick={handleCreate} disabled={saving} className="px-5 py-2 rounded-lg bg-[#F5C518] hover:bg-[#D5A711] text-black font-bold text-sm transition-all flex items-center gap-2">
               {saving && <Loader2 size={14} className="animate-spin" />}
-              {saving ? 'Creating...' : 'Create'}
+              {saving ? t('admin.creating') : t('admin.create')}
             </button>
           </div>
         </motion.div>
@@ -540,8 +552,8 @@ function PromoSection() {
       {promos.length === 0 && !showForm ? (
         <div className="text-center py-16 text-white/25">
           <Ticket size={40} className="mx-auto mb-3 opacity-40" />
-          <p className="text-sm font-medium">No promo codes yet</p>
-          <p className="text-xs text-white/20">Create one to offer discounts on subscriptions</p>
+          <p className="text-sm font-medium">{t('admin.noPromos')}</p>
+          <p className="text-xs text-white/20">{t('admin.createPromoDesc')}</p>
         </div>
       ) : (
         <div className="space-y-2">
@@ -569,24 +581,24 @@ function PromoSection() {
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold" style={{ background: 'rgba(34, 197, 94, 0.1)', color: '#4ade80' }}>
                         {promo.discountType === 'BONUS_ENTRIES' ? <Plus size={12} /> : promo.discountType === 'PERCENTAGE' ? <Percent size={12} /> : <DollarSign size={12} />}
-                        {promo.discountType === 'BONUS_ENTRIES' ? `+${promo.bonusEntries} entries` : promo.discountType === 'PERCENTAGE' ? `${promo.discountAmount}% off` : `${promo.discountAmount} JD off`}
+                        {promo.discountType === 'BONUS_ENTRIES' ? `+${promo.bonusEntries} ${t('admin.entries')}` : promo.discountType === 'PERCENTAGE' ? `${promo.discountAmount}%` : `${promo.discountAmount} JD`}
                       </span>
                       <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium" style={{ background: 'rgba(59, 130, 246, 0.1)', color: '#60a5fa' }}>
                         <Hash size={12} />
-                        {promo.timesUsed}{promo.maxUses > 0 ? `/${promo.maxUses}` : '/∞'} used
+                        {promo.timesUsed}{promo.maxUses > 0 ? `/${promo.maxUses}` : '/∞'} {t('admin.used')}
                       </span>
                       {promo.expiresAt && (
                         <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${expired ? 'text-red-400' : 'text-white/40'}`}
                           style={{ background: expired ? 'rgba(239, 68, 68, 0.1)' : 'rgba(255,255,255,0.05)' }}>
                           <Calendar size={12} />
-                          {expired ? 'Expired' : `Expires ${new Date(promo.expiresAt).toLocaleDateString()}`}
+                          {expired ? t('admin.expired') : `${t('admin.expiresAt').split(' ')[0]} ${new Date(promo.expiresAt).toLocaleDateString()}`}
                         </span>
                       )}
                       <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold ${
                         promo.isActive && !expired && !exhausted ? 'text-green-400' : 'text-red-400'
                       }`} style={{ background: promo.isActive && !expired && !exhausted ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)' }}>
                         <span className={`w-1.5 h-1.5 rounded-full ${promo.isActive && !expired && !exhausted ? 'bg-green-400' : 'bg-red-400'}`} />
-                        {!promo.isActive ? 'Disabled' : expired ? 'Expired' : exhausted ? 'Used Up' : 'Active'}
+                        {!promo.isActive ? t('admin.disabled') : expired ? t('admin.expired') : exhausted ? t('admin.usedUp') : t('admin.active')}
                       </span>
                     </div>
                   </div>
@@ -613,7 +625,7 @@ function PromoSection() {
                   <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
                     transition={{ duration: 0.25 }} className="px-4 py-3 rounded-b-xl overflow-hidden"
                     style={{ borderTop: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.02)' }}>
-                    <p className="text-[10px] font-bold text-white/30 uppercase tracking-wider mb-2">Usage History</p>
+                    <p className="text-[10px] font-bold text-white/30 uppercase tracking-wider mb-2">{t('admin.usageHistory')}</p>
                     <div className="space-y-1.5 max-h-48 overflow-y-auto">
                       {promo.usages.map((usage) => (
                         <div key={usage.id} className="flex items-center justify-between rounded-lg px-3 py-2 border border-white/8 text-sm" style={{ background: 'rgba(255,255,255,0.04)' }}>
@@ -622,7 +634,7 @@ function PromoSection() {
                               <User size={12} className="text-white/30" />
                             </div>
                             <div>
-                              <span className="font-semibold text-white/80">{usage.student?.fullName || usage.studentName || 'Deleted Student'}</span>
+                              <span className="font-semibold text-white/80">{usage.student?.fullName || usage.studentName || t('dash.deletedStudent')}</span>
                               {usage.student?.phone && <span className="text-xs text-white/25 ml-2">{usage.student.phone}</span>}
                             </div>
                           </div>
@@ -650,9 +662,9 @@ function PromoSection() {
         open={confirmDeleteId !== null}
         onClose={() => setConfirmDeleteId(null)}
         onConfirm={executeDeletePromo}
-        title="Delete Promo Code"
-        message="Delete this promo code and all its usage history? This action cannot be undone."
-        confirmLabel="Delete"
+        title={t('admin.deletePromo')}
+        message={t('admin.deletePromoMsg')}
+        confirmLabel={t('common.delete')}
         variant="danger"
       />
     </div>
@@ -671,6 +683,7 @@ function UsersSection() {
 
 /* --- Staff List View --- */
 function StaffListView({ onSelect }: { onSelect: (id: number) => void }) {
+  const { t } = useI18n()
   const [users, setUsers] = useState<UserAccount[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -679,7 +692,7 @@ function StaffListView({ onSelect }: { onSelect: (id: number) => void }) {
   const [password, setPassword] = useState('')
   const [staffName, setStaffName] = useState('')
   const [staffPhone, setStaffPhone] = useState('')
-  const [role, setRole] = useState('REGISTERATION_COUNTER')
+  const [role, setRole] = useState('STAFF')
   const [selectedPermissions, setSelectedPermissions] = useState<string[]>(['/', '/directory', '/logs'])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -694,7 +707,7 @@ function StaffListView({ onSelect }: { onSelect: (id: number) => void }) {
   useEffect(() => { fetchUsers() }, [fetchUsers])
 
   const handleCreate = async () => {
-    if (!email.trim() || !password) { setError('Email and password are required'); return }
+    if (!email.trim() || !password) { setError(`${t('admin.email')} & ${t('admin.password')} *`); return }
     setSaving(true); setError('')
     try {
       const res = await fetch('/api/auth/register', {
@@ -704,16 +717,16 @@ function StaffListView({ onSelect }: { onSelect: (id: number) => void }) {
       })
       const data = await res.json()
       if (!res.ok) { setError(data.error || 'Failed to create user'); return }
-      setEmail(''); setPassword(''); setStaffName(''); setStaffPhone(''); setRole('REGISTERATION_COUNTER'); setSelectedPermissions(['/', '/directory', '/logs']); setShowForm(false)
+      setEmail(''); setPassword(''); setStaffName(''); setStaffPhone(''); setRole('STAFF'); setSelectedPermissions(['/', '/directory', '/logs']); setShowForm(false)
       fetchUsers()
     } finally { setSaving(false) }
   }
 
   const roleColors: Record<string, string> = {
-    ADMIN: 'text-red-400', MANAGER: 'text-amber-400', BARISTA: 'text-purple-400', REGISTERATION_COUNTER: 'text-blue-400',
+    ADMIN: 'text-red-400', MANAGER: 'text-amber-400', STAFF: 'text-blue-400',
   }
   const roleBgs: Record<string, string> = {
-    ADMIN: 'rgba(239, 68, 68, 0.1)', MANAGER: 'rgba(245, 158, 11, 0.1)', BARISTA: 'rgba(168, 85, 247, 0.1)', REGISTERATION_COUNTER: 'rgba(59, 130, 246, 0.1)',
+    ADMIN: 'rgba(239, 68, 68, 0.1)', MANAGER: 'rgba(245, 158, 11, 0.1)', STAFF: 'rgba(59, 130, 246, 0.1)',
   }
 
   const togglePermission = (path: string) => {
@@ -727,10 +740,10 @@ function StaffListView({ onSelect }: { onSelect: (id: number) => void }) {
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
-        <p className="text-sm text-white/30">{users.length} staff account{users.length !== 1 ? 's' : ''}</p>
+        <p className="text-sm text-white/30">{users.length} {t('admin.staff')}</p>
         <button onClick={() => setShowForm(!showForm)}
           className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#F5C518] hover:bg-[#D5A711] text-black font-bold text-sm transition-all">
-          <Plus size={16} /> New Account
+          <Plus size={16} /> {t('admin.newAccount')}
         </button>
       </div>
 
@@ -741,45 +754,44 @@ function StaffListView({ onSelect }: { onSelect: (id: number) => void }) {
           exit={{ opacity: 0, height: 0, y: -10 }} transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
           className="hive-card !rounded-2xl overflow-hidden">
           <h3 className="text-sm font-bold text-white flex items-center gap-2">
-            <Users size={16} className="text-[#F5C518]" /> Create Staff Account
+            <Users size={16} className="text-[#F5C518]" /> {t('admin.createStaff')}
           </h3>
           <div className="grid grid-cols-2 gap-4 mt-4">
             <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-white/30 uppercase tracking-wider">Full Name</label>
+              <label className="text-[10px] font-bold text-white/30 uppercase tracking-wider">{t('admin.fullName')}</label>
               <input value={staffName} onChange={(e) => setStaffName(e.target.value)} placeholder="e.g. Ahmad Khalil"
                 className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white focus:border-[#F5C518] focus:outline-none focus:ring-1 focus:ring-[#F5C518] placeholder:text-white/20" />
             </div>
             <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-white/30 uppercase tracking-wider">Phone Number</label>
+              <label className="text-[10px] font-bold text-white/30 uppercase tracking-wider">{t('admin.phoneNumber')}</label>
               <input value={staffPhone} onChange={(e) => setStaffPhone(e.target.value)} placeholder="07XXXXXXXX"
                 className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white focus:border-[#F5C518] focus:outline-none focus:ring-1 focus:ring-[#F5C518] placeholder:text-white/20" />
             </div>
             <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-white/30 uppercase tracking-wider">Email *</label>
+              <label className="text-[10px] font-bold text-white/30 uppercase tracking-wider">{t('admin.email')} *</label>
               <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="staff@hive.study"
                 className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white focus:border-[#F5C518] focus:outline-none focus:ring-1 focus:ring-[#F5C518] placeholder:text-white/20" />
             </div>
             <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-white/30 uppercase tracking-wider">Password *</label>
+              <label className="text-[10px] font-bold text-white/30 uppercase tracking-wider">{t('admin.password')} *</label>
               <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Min 8 chars, letter + number"
                 className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white focus:border-[#F5C518] focus:outline-none focus:ring-1 focus:ring-[#F5C518] placeholder:text-white/20" />
             </div>
             <div className="space-y-1.5 col-span-2">
-              <label className="text-[10px] font-bold text-white/30 uppercase tracking-wider">Role</label>
+              <label className="text-[10px] font-bold text-white/30 uppercase tracking-wider">{t('admin.role')}</label>
               <select value={role} onChange={(e) => setRole(e.target.value)}
                 className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white focus:border-[#F5C518] focus:outline-none focus:ring-1 focus:ring-[#F5C518]"
                 style={{ colorScheme: 'dark' }}>
-                <option value="REGISTERATION_COUNTER">Registration Counter</option>
-                <option value="BARISTA">Barista</option>
-                <option value="MANAGER">Manager (custom access)</option>
-                <option value="ADMIN">Admin (full access)</option>
+                <option value="STAFF">{t('admin.staff')}</option>
+                <option value="MANAGER">{t('admin.managerCustom')}</option>
+                <option value="ADMIN">{t('admin.adminFull')}</option>
               </select>
             </div>
             {/* Permissions checkboxes for MANAGER */}
             {role === 'MANAGER' && (
               <div className="col-span-2 space-y-2">
-                <label className="text-[10px] font-bold text-white/30 uppercase tracking-wider">Page Permissions</label>
-                <p className="text-[10px] text-white/20">Select which pages this manager can access</p>
+                <label className="text-[10px] font-bold text-white/30 uppercase tracking-wider">{t('admin.pagePermissions')}</label>
+                <p className="text-[10px] text-white/20">{t('admin.selectPages')}</p>
                 <div className="grid grid-cols-2 gap-2 mt-1">
                   {ALL_PAGES.map(page => (
                     <label key={page.path}
@@ -802,17 +814,17 @@ function StaffListView({ onSelect }: { onSelect: (id: number) => void }) {
             )}
             {role === 'ADMIN' && (
               <div className="col-span-2 p-3 rounded-lg border border-red-500/20" style={{ background: 'rgba(239,68,68,0.05)' }}>
-                <p className="text-xs text-red-400 font-semibold flex items-center gap-1.5"><Shield size={14} /> Full admin access</p>
-                <p className="text-[10px] text-white/25 mt-1">This account will have unrestricted access to all pages, settings, and the ability to create/delete other accounts.</p>
+                <p className="text-xs text-red-400 font-semibold flex items-center gap-1.5"><Shield size={14} /> {t('admin.fullAdminAccess')}</p>
+                <p className="text-[10px] text-white/25 mt-1">{t('admin.fullAdminDesc')}</p>
               </div>
             )}
           </div>
           {error && <p className="text-sm text-red-400 p-2 rounded-lg mt-3" style={{ background: 'rgba(239, 68, 68, 0.1)' }}>{error}</p>}
           <div className="flex gap-3 pt-4 mt-4" style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-            <button onClick={() => setShowForm(false)} className="px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-white font-medium text-sm hover:bg-white/10 transition-all">Cancel</button>
+            <button onClick={() => setShowForm(false)} className="px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-white font-medium text-sm hover:bg-white/10 transition-all">{t('common.cancel')}</button>
             <button onClick={handleCreate} disabled={saving} className="px-5 py-2 rounded-lg bg-[#F5C518] hover:bg-[#D5A711] text-black font-bold text-sm transition-all flex items-center gap-2">
               {saving && <Loader2 size={14} className="animate-spin" />}
-              {saving ? 'Creating...' : 'Create Account'}
+              {saving ? t('admin.creating') : t('admin.createAccount')}
             </button>
           </div>
         </motion.div>
@@ -823,7 +835,7 @@ function StaffListView({ onSelect }: { onSelect: (id: number) => void }) {
       {users.length === 0 ? (
         <div className="text-center py-16 text-white/25">
           <Users size={40} className="mx-auto mb-3 opacity-40" />
-          <p className="text-sm font-medium">No staff accounts</p>
+          <p className="text-sm font-medium">{t('admin.noStaff')}</p>
         </div>
       ) : (
         <div className="space-y-2">
@@ -848,7 +860,7 @@ function StaffListView({ onSelect }: { onSelect: (id: number) => void }) {
                   <div className="flex items-center gap-3 text-xs text-white/25">
                     {user.name && <span>{user.email}</span>}
                     {user.phone && <span className="flex items-center gap-1"><Phone size={10} />{user.phone}</span>}
-                    {!user.name && <span>Joined {new Date(user.createdAt).toLocaleDateString()}</span>}
+                    {!user.name && <span>{new Date(user.createdAt).toLocaleDateString()}</span>}
                   </div>
                 </div>
               </div>
@@ -857,13 +869,13 @@ function StaffListView({ onSelect }: { onSelect: (id: number) => void }) {
                   {user.lastLogin ? (
                     <p className="text-[10px] text-white/20">Last seen {new Date(user.lastLogin).toLocaleDateString('en-JO', { month: 'short', day: 'numeric' })}</p>
                   ) : (
-                    <p className="text-[10px] text-white/15">Never logged in</p>
+                    <p className="text-[10px] text-white/15">{t('admin.neverLoggedIn')}</p>
                   )}
                   <p className="text-[10px] text-white/15">{user.totalLogins} login{user.totalLogins !== 1 ? 's' : ''}</p>
                 </div>
                 <span className={`px-3 py-1 rounded-full text-xs font-bold ${roleColors[user.role] || 'text-white/40'}`}
                   style={{ background: roleBgs[user.role] || 'rgba(255,255,255,0.05)' }}>
-                  {user.role === 'REGISTERATION_COUNTER' ? 'Counter' : user.role === 'MANAGER' ? 'Manager' : user.role}
+                  {user.role === 'STAFF' ? t('admin.staff') : user.role === 'MANAGER' ? t('admin.managerCustom').split(' ')[0] : user.role}
                 </span>
                 <ChevronRight size={16} className="text-white/15 group-hover:text-[#F5C518] transition-colors" />
               </div>
@@ -877,6 +889,8 @@ function StaffListView({ onSelect }: { onSelect: (id: number) => void }) {
 
 /* --- Staff Detail View (Subpage) --- */
 function StaffDetailView({ userId, onBack }: { userId: number; onBack: () => void }) {
+  const { t } = useI18n()
+  const { toast } = useToast()
   const [user, setUser] = useState<UserDetail | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -973,7 +987,7 @@ function StaffDetailView({ userId, onBack }: { userId: number; onBack: () => voi
       })
       const data = await res.json()
       if (!res.ok) { setResetError(data.error); return }
-      setResetSuccess('Password reset successfully')
+      setResetSuccess(t('admin.passwordResetSuccess'))
       setNewPassword('')
       setShowNewPassword(false)
       setTimeout(() => { setShowReset(false); setResetSuccess('') }, 2000)
@@ -987,16 +1001,16 @@ function StaffDetailView({ userId, onBack }: { userId: number; onBack: () => voi
       if (res.ok) onBack()
       else {
         const data = await res.json()
-        alert(data.error || 'Failed to delete')
+        toast(data.error || 'Failed to delete')
       }
     } finally { setDeleting(false) }
   }
 
   const roleColors: Record<string, string> = {
-    ADMIN: 'text-red-400', MANAGER: 'text-amber-400', BARISTA: 'text-purple-400', REGISTERATION_COUNTER: 'text-blue-400',
+    ADMIN: 'text-red-400', MANAGER: 'text-amber-400', STAFF: 'text-blue-400',
   }
   const roleBgs: Record<string, string> = {
-    ADMIN: 'rgba(239, 68, 68, 0.1)', MANAGER: 'rgba(245, 158, 11, 0.1)', BARISTA: 'rgba(168, 85, 247, 0.1)', REGISTERATION_COUNTER: 'rgba(59, 130, 246, 0.1)',
+    ADMIN: 'rgba(239, 68, 68, 0.1)', MANAGER: 'rgba(245, 158, 11, 0.1)', STAFF: 'rgba(59, 130, 246, 0.1)',
   }
 
   const eventColors: Record<string, { bg: string; text: string; icon: React.ReactNode }> = {
@@ -1006,7 +1020,7 @@ function StaffDetailView({ userId, onBack }: { userId: number; onBack: () => voi
   }
 
   if (loading) return <div className="flex justify-center py-12"><Loader2 size={24} className="animate-spin text-white/25" /></div>
-  if (!user) return <div className="text-center py-12 text-white/25">User not found</div>
+  if (!user) return <div className="text-center py-12 text-white/25">{t('admin.noStaff')}</div>
 
   // Build attendance calendar for the selected month
   const currentAttendance = user.attendance.find(a => a.month === attendanceMonth)
@@ -1023,7 +1037,7 @@ function StaffDetailView({ userId, onBack }: { userId: number; onBack: () => voi
 
       {/* Back button */}
       <button onClick={onBack} className="flex items-center gap-2 text-sm text-white/40 hover:text-white transition-colors">
-        <ArrowLeft size={16} /> Back to Staff List
+        <ArrowLeft size={16} /> {t('admin.backToList')}
       </button>
 
       {/* Profile card */}
@@ -1046,7 +1060,7 @@ function StaffDetailView({ userId, onBack }: { userId: number; onBack: () => voi
               ) : (
                 <>
                   <div className="flex items-center gap-2">
-                    <h2 className="text-lg font-bold text-white">{user.name || 'Unnamed Staff'}</h2>
+                    <h2 className="text-lg font-bold text-white">{user.name || t('admin.unnamedStaff')}</h2>
                     {!user.isActive && <span className="px-2 py-0.5 rounded text-[10px] font-bold text-red-400 border border-red-500/20" style={{ background: 'rgba(239,68,68,0.1)' }}>DISABLED</span>}
                   </div>
                   <div className="flex items-center gap-4 text-xs text-white/30 mt-1">
@@ -1064,24 +1078,55 @@ function StaffDetailView({ userId, onBack }: { userId: number; onBack: () => voi
                 <button onClick={() => setEditing(false)} className="p-2 rounded-lg bg-white/5 border border-white/10 text-white/40 hover:text-white transition-all"><X size={16} /></button>
                 <button onClick={handleSaveProfile} disabled={editSaving}
                   className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#F5C518] hover:bg-[#D5A711] text-black font-bold text-xs transition-all">
-                  {editSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Save
+                  {editSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} {t('admin.save')}
                 </button>
               </>
             ) : (
               <button onClick={() => setEditing(true)} className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white/40 hover:text-white text-xs font-medium transition-all">
-                <Edit3 size={14} /> Edit
+                <Edit3 size={14} /> {t('profile.edit')}
               </button>
             )}
           </div>
         </div>
 
+        {/* Role change */}
+        <div className="flex items-center gap-3 mt-5 p-3 rounded-xl" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+          <span className="text-[10px] font-bold text-white/30 uppercase tracking-wider">{t('admin.changeRole')}</span>
+          <select
+            value={user.role}
+            onChange={async (e) => {
+              const newRole = e.target.value
+              if (newRole === user.role) return
+              const res = await fetch(`/api/auth/users/${userId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ role: newRole }),
+              })
+              if (res.ok) {
+                toast(t('admin.roleChanged'), 'success')
+                fetchUser()
+              } else {
+                const d = await res.json().catch(() => ({}))
+                toast(d.error || 'Failed', 'error')
+              }
+            }}
+            className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-[#F5C518] outline-none"
+            style={{ colorScheme: 'dark' }}
+          >
+            <option value="STAFF">{t('admin.staff')}</option>
+            <option value="MANAGER">{t('admin.managerCustom')}</option>
+            <option value="ADMIN">{t('admin.adminFull')}</option>
+          </select>
+          <span className="text-[10px] text-white/20">{t('admin.roleChangeNote')}</span>
+        </div>
+
         {/* Stats row */}
         <div className="grid grid-cols-4 gap-3 mt-5">
           {[
-            { label: 'Role', value: user.role === 'REGISTERATION_COUNTER' ? 'Counter' : user.role === 'MANAGER' ? 'Manager' : user.role, color: roleColors[user.role] },
-            { label: 'Total Logins', value: user.totalLogins.toString(), color: 'text-white' },
-            { label: 'Last Active', value: user.lastLogin ? new Date(user.lastLogin).toLocaleDateString('en-JO', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Never', color: 'text-white' },
-            { label: 'Member Since', value: new Date(user.createdAt).toLocaleDateString('en-JO', { month: 'short', day: 'numeric', year: 'numeric' }), color: 'text-white' },
+            { label: t('admin.role'), value: user.role === 'STAFF' ? t('admin.staff') : user.role === 'MANAGER' ? t('admin.managerCustom').split(' ')[0] : user.role, color: roleColors[user.role] },
+            { label: t('admin.totalLogins'), value: user.totalLogins.toString(), color: 'text-white' },
+            { label: t('admin.lastActive'), value: user.lastLogin ? new Date(user.lastLogin).toLocaleDateString('en-JO', { month: 'short', day: 'numeric', year: 'numeric' }) : t('admin.never'), color: 'text-white' },
+            { label: t('profile.memberSince'), value: new Date(user.createdAt).toLocaleDateString('en-JO', { month: 'short', day: 'numeric', year: 'numeric' }), color: 'text-white' },
           ].map((stat) => (
             <div key={stat.label} className="rounded-xl p-3 text-center" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
               <p className="text-[10px] font-bold text-white/20 uppercase tracking-wider">{stat.label}</p>
@@ -1094,7 +1139,7 @@ function StaffDetailView({ userId, onBack }: { userId: number; onBack: () => voi
         <div className="flex items-center gap-2 mt-5 pt-4" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
           <button onClick={() => setShowReset(!showReset)}
             className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold text-[#F5C518] transition-all hover:bg-[rgba(245,197,24,0.1)] border border-transparent hover:border-[rgba(245,197,24,0.2)]">
-            <KeyRound size={14} /> Reset Password
+            <KeyRound size={14} /> {t('admin.resetPassword')}
           </button>
           {user.role !== 'ADMIN' && (
             <>
@@ -1104,11 +1149,11 @@ function StaffDetailView({ userId, onBack }: { userId: number; onBack: () => voi
                     ? 'text-orange-400 hover:bg-orange-500/10 hover:border-orange-500/20'
                     : 'text-green-400 hover:bg-green-500/10 hover:border-green-500/20'
                 }`}>
-                {user.isActive ? <><UserX size={14} /> Disable Account</> : <><UserCheckIcon size={14} /> Enable Account</>}
+                {user.isActive ? <><UserX size={14} /> {t('admin.disableAccount')}</> : <><UserCheckIcon size={14} /> {t('admin.enableAccount')}</>}
               </button>
               <button onClick={() => setConfirmDelete(true)}
                 className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold text-red-400 transition-all hover:bg-red-500/10 border border-transparent hover:border-red-500/20 ml-auto">
-                <Trash2 size={14} /> Delete Account
+                <Trash2 size={14} /> {t('admin.deleteAccount')}
               </button>
             </>
           )}
@@ -1118,7 +1163,7 @@ function StaffDetailView({ userId, onBack }: { userId: number; onBack: () => voi
         {user.createdBy && (
           <div className="mt-3 pt-3 flex items-center gap-2 text-xs text-white/20" style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
             <User size={12} />
-            <span>Created by <span className="text-white/40 font-semibold">{user.createdBy.name || user.createdBy.email}</span></span>
+            <span>{t('admin.createdBy')} <span className="text-white/40 font-semibold">{user.createdBy.name || user.createdBy.email}</span></span>
           </div>
         )}
       </div>
@@ -1128,20 +1173,20 @@ function StaffDetailView({ userId, onBack }: { userId: number; onBack: () => voi
         <div className="hive-card !rounded-2xl">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-bold text-white flex items-center gap-2">
-              <Shield size={16} className="text-amber-400" /> Page Permissions
+              <Shield size={16} className="text-amber-400" /> {t('admin.pagePermissions')}
             </h3>
             {editingPerms ? (
               <div className="flex items-center gap-2">
                 <button onClick={() => setEditingPerms(false)} className="p-1.5 rounded-lg bg-white/5 border border-white/10 text-white/40 hover:text-white transition-all"><X size={14} /></button>
                 <button onClick={handleSavePermissions} disabled={savingPerms}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#F5C518] hover:bg-[#D5A711] text-black font-bold text-xs transition-all">
-                  {savingPerms ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />} Save
+                  {savingPerms ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />} {t('admin.save')}
                 </button>
               </div>
             ) : (
               <button onClick={() => setEditingPerms(true)}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-white/40 hover:text-white text-xs font-medium transition-all">
-                <Edit3 size={12} /> Edit
+                <Edit3 size={12} /> {t('profile.edit')}
               </button>
             )}
           </div>
@@ -1164,7 +1209,7 @@ function StaffDetailView({ userId, onBack }: { userId: number; onBack: () => voi
                     <span className={`text-xs font-semibold ${hasAccess ? 'text-white/70' : 'text-white/25'}`}>{page.label}</span>
                   </div>
                   <span className={`text-[9px] font-bold uppercase ${hasAccess ? 'text-green-400' : 'text-white/15'}`}>
-                    {hasAccess ? 'Allowed' : 'Denied'}
+                    {hasAccess ? t('admin.allowed') : t('admin.denied')}
                   </span>
                 </div>
               )
@@ -1179,7 +1224,7 @@ function StaffDetailView({ userId, onBack }: { userId: number; onBack: () => voi
         <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
           className="hive-card !rounded-2xl overflow-hidden" style={{ borderColor: 'rgba(245, 197, 24, 0.2)' }}>
           <h3 className="text-sm font-bold text-white flex items-center gap-2">
-            <KeyRound size={16} className="text-[#F5C518]" /> Reset Password
+            <KeyRound size={16} className="text-[#F5C518]" /> {t('admin.resetPassword')}
           </h3>
           {resetSuccess ? (
             <div className="mt-3 flex items-center gap-2 p-3 rounded-lg text-green-400 text-sm" style={{ background: 'rgba(34, 197, 94, 0.1)' }}>
@@ -1190,7 +1235,7 @@ function StaffDetailView({ userId, onBack }: { userId: number; onBack: () => voi
             <>
               <div className="mt-3 relative">
                 <input type={showNewPassword ? 'text' : 'password'} value={newPassword} onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="New password (8+ chars, letter + number)" autoFocus
+                  placeholder={t('admin.newPasswordPlaceholder')} autoFocus
                   onKeyDown={(e) => { if (e.key === 'Enter') handleResetPassword() }}
                   className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 pr-12 text-sm text-white focus:border-[#F5C518] outline-none placeholder:text-white/20" />
                 <button onClick={() => setShowNewPassword(!showNewPassword)}
@@ -1201,10 +1246,10 @@ function StaffDetailView({ userId, onBack }: { userId: number; onBack: () => voi
               {resetError && <p className="text-sm text-red-400 mt-2">{resetError}</p>}
               <div className="flex gap-3 mt-3">
                 <button onClick={() => { setShowReset(false); setNewPassword(''); setResetError('') }}
-                  className="px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm hover:bg-white/10 transition-all">Cancel</button>
+                  className="px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm hover:bg-white/10 transition-all">{t('common.cancel')}</button>
                 <button onClick={handleResetPassword} disabled={resetting || !newPassword}
                   className="px-5 py-2 rounded-lg bg-[#F5C518] hover:bg-[#D5A711] text-black font-bold text-sm transition-all disabled:opacity-40">
-                  {resetting ? <Loader2 size={14} className="animate-spin" /> : 'Reset'}
+                  {resetting ? <Loader2 size={14} className="animate-spin" /> : t('admin.reset')}
                 </button>
               </div>
             </>
@@ -1219,15 +1264,15 @@ function StaffDetailView({ userId, onBack }: { userId: number; onBack: () => voi
         <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
           className="hive-card !rounded-2xl overflow-hidden" style={{ borderColor: 'rgba(239, 68, 68, 0.3)' }}>
           <h3 className="text-sm font-bold text-red-400 flex items-center gap-2">
-            <Trash2 size={16} /> Permanently Delete Account
+            <Trash2 size={16} /> {t('admin.permanentlyDelete')}
           </h3>
-          <p className="text-sm text-white/40 mt-2">Are you sure you want to delete <span className="text-white font-semibold">{user.email}</span>? This will remove the account and all their audit log history. This cannot be undone.</p>
+          <p className="text-sm text-white/40 mt-2">{t('admin.deleteAccountMsg').replace('{email}', user.email)}</p>
           <div className="flex gap-3 mt-4">
-            <button onClick={() => setConfirmDelete(false)} className="px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm hover:bg-white/10 transition-all">Cancel</button>
+            <button onClick={() => setConfirmDelete(false)} className="px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm hover:bg-white/10 transition-all">{t('common.cancel')}</button>
             <button onClick={handleDelete} disabled={deleting}
               className="px-5 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white font-bold text-sm transition-all flex items-center gap-2">
               {deleting && <Loader2 size={14} className="animate-spin" />}
-              {deleting ? 'Deleting...' : 'Yes, Delete'}
+              {deleting ? t('admin.deleting') : t('admin.yesDelete')}
             </button>
           </div>
         </motion.div>
@@ -1238,7 +1283,7 @@ function StaffDetailView({ userId, onBack }: { userId: number; onBack: () => voi
       <div className="hive-card !rounded-2xl">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-sm font-bold text-white flex items-center gap-2">
-            <CalendarDays size={16} className="text-[#F5C518]" /> Monthly Attendance
+            <CalendarDays size={16} className="text-[#F5C518]" /> {t('admin.monthlyAttendance')}
           </h3>
           <div className="flex items-center gap-2">
             <button onClick={() => {
@@ -1260,9 +1305,9 @@ function StaffDetailView({ userId, onBack }: { userId: number; onBack: () => voi
         </div>
 
         <div className="flex items-center gap-3 mb-3 text-[10px] font-bold text-white/20 uppercase tracking-wider">
-          <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-green-500/60" /> Present</span>
-          <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: 'rgba(255,255,255,0.04)' }} /> Absent</span>
-          <span className="ml-auto">{attendanceDays.length} day{attendanceDays.length !== 1 ? 's' : ''} this month</span>
+          <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-green-500/60" /> {t('admin.present')}</span>
+          <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: 'rgba(255,255,255,0.04)' }} /> {t('admin.absent')}</span>
+          <span className="ml-auto">{attendanceDays.length} {attendanceDays.length !== 1 ? t('admin.daysThisMonth') : t('admin.dayThisMonth')}</span>
         </div>
 
         {/* Calendar grid */}
@@ -1296,10 +1341,10 @@ function StaffDetailView({ userId, onBack }: { userId: number; onBack: () => voi
       {/* Activity Log */}
       <div className="hive-card !rounded-2xl">
         <h3 className="text-sm font-bold text-white flex items-center gap-2 mb-4">
-          <ClipboardList size={16} className="text-[#F5C518]" /> Recent Activity
+          <ClipboardList size={16} className="text-[#F5C518]" /> {t('admin.recentActivity')}
         </h3>
         {user.auditLogs.length === 0 ? (
-          <p className="text-sm text-white/20 text-center py-8">No activity recorded yet</p>
+          <p className="text-sm text-white/20 text-center py-8">{t('admin.noActivity')}</p>
         ) : (
           <div className="space-y-1.5 max-h-[400px] overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
             {user.auditLogs.map((log) => {
@@ -1334,9 +1379,10 @@ function StaffDetailView({ userId, onBack }: { userId: number; onBack: () => voi
 
 /* ======================== STAFF SHIFTS SECTION ======================== */
 function ShiftsSection() {
+  const { t } = useI18n()
   const [shifts, setShifts] = useState<ShiftEntry[]>([])
   const [loading, setLoading] = useState(true)
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().slice(0, 10))
+  const [selectedDate, setSelectedDate] = useState(todayString())
 
   const fetchShifts = useCallback(async () => {
     setLoading(true)
@@ -1358,16 +1404,16 @@ function ShiftsSection() {
   }
 
   const roleColors: Record<string, string> = {
-    ADMIN: 'text-red-400', MANAGER: 'text-amber-400', BARISTA: 'text-purple-400', REGISTERATION_COUNTER: 'text-blue-400',
+    ADMIN: 'text-red-400', MANAGER: 'text-amber-400', STAFF: 'text-blue-400',
   }
   const roleBgs: Record<string, string> = {
-    ADMIN: 'rgba(239, 68, 68, 0.1)', MANAGER: 'rgba(245, 158, 11, 0.1)', BARISTA: 'rgba(168, 85, 247, 0.1)', REGISTERATION_COUNTER: 'rgba(59, 130, 246, 0.1)',
+    ADMIN: 'rgba(239, 68, 68, 0.1)', MANAGER: 'rgba(245, 158, 11, 0.1)', STAFF: 'rgba(59, 130, 246, 0.1)',
   }
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-white/30">{shifts.length} shift{shifts.length !== 1 ? 's' : ''} on this date</p>
+        <p className="text-sm text-white/30">{shifts.length} {t('admin.staffShifts')}</p>
         <input
           type="date"
           value={selectedDate}
@@ -1382,16 +1428,16 @@ function ShiftsSection() {
       ) : shifts.length === 0 ? (
         <div className="text-center py-16 text-white/25">
           <Clock size={40} className="mx-auto mb-3 opacity-40" />
-          <p className="text-sm font-medium">No shifts recorded</p>
-          <p className="text-xs text-white/20">Staff shifts are auto-logged on login/logout</p>
+          <p className="text-sm font-medium">{t('admin.noShifts')}</p>
+          <p className="text-xs text-white/20">{t('admin.shiftsAutoLogged')}</p>
         </div>
       ) : (
         <div className="hive-card !rounded-2xl !p-0 overflow-hidden">
           <table className="w-full text-sm text-left">
             <thead style={{ background: 'rgba(10,10,10,0.95)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
               <tr>
-                {['Staff', 'Role', 'Clock In', 'Clock Out', 'Duration'].map((h) => (
-                  <th key={h} className="px-5 py-4 text-[10px] font-bold text-white/30 uppercase tracking-wider">{h}</th>
+                {[t('admin.staff'), t('admin.role'), t('admin.clockIn'), t('admin.clockOut'), t('admin.duration')].map((h, i) => (
+                  <th key={i} className="px-5 py-4 text-[10px] font-bold text-white/30 uppercase tracking-wider">{h}</th>
                 ))}
               </tr>
             </thead>
@@ -1402,7 +1448,7 @@ function ShiftsSection() {
                   <td className="px-5 py-4">
                     <span className={`px-2 py-1 rounded-md text-[10px] font-bold ${roleColors[shift.role] || 'text-white/40'}`}
                       style={{ background: roleBgs[shift.role] || 'rgba(255,255,255,0.05)' }}>
-                      {shift.role === 'REGISTERATION_COUNTER' ? 'Counter' : shift.role}
+                      {shift.role === 'STAFF' ? t('admin.staff') : shift.role}
                     </span>
                   </td>
                   <td className="px-5 py-4 font-mono text-white/60">{formatTime(shift.clockIn)}</td>
@@ -1424,9 +1470,69 @@ function ShiftsSection() {
 
 /* ======================== BACKUP & SETTINGS SECTION ======================== */
 function BackupSection() {
+  const { t } = useI18n()
+  const { toast } = useToast()
   const [downloading, setDownloading] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [status, setStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+
+  // Backup history
+  const [backupLogs, setBackupLogs] = useState<any[]>([])
+  const [lastSuccess, setLastSuccess] = useState<any>(null)
+  const [triggering, setTriggering] = useState(false)
+
+  // Auto-backup settings
+  const [backupFreq, setBackupFreq] = useState('24')
+  const [backupRetention, setBackupRetention] = useState('30')
+  const [savingBackupSettings, setSavingBackupSettings] = useState(false)
+
+  useEffect(() => {
+    fetch('/api/backup/status')
+      .then(r => r.ok ? r.json() : { logs: [], lastSuccess: null })
+      .then(data => {
+        setBackupLogs(data.logs || [])
+        setLastSuccess(data.lastSuccess)
+      })
+      .catch(() => {})
+  }, [])
+
+  const handleTriggerBackup = async () => {
+    setTriggering(true)
+    try {
+      const res = await fetch('/api/backup/trigger', { method: 'POST' })
+      const data = await res.json()
+      if (data.success) {
+        toast(t('admin.backupTriggered'), 'success')
+        const statusRes = await fetch('/api/backup/status')
+        if (statusRes.ok) {
+          const statusData = await statusRes.json()
+          setBackupLogs(statusData.logs || [])
+          setLastSuccess(statusData.lastSuccess)
+        }
+      } else {
+        toast(data.error || 'Backup failed', 'error')
+      }
+    } catch {
+      toast('Backup trigger failed', 'error')
+    } finally {
+      setTriggering(false)
+    }
+  }
+
+  const handleSaveBackupSettings = async () => {
+    setSavingBackupSettings(true)
+    try {
+      await Promise.all([
+        fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'backupFrequencyHours', value: backupFreq }) }),
+        fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'backupRetentionDays', value: backupRetention }) }),
+      ])
+      toast('Saved!', 'success')
+    } catch {
+      toast('Failed to save', 'error')
+    } finally {
+      setSavingBackupSettings(false)
+    }
+  }
 
   // Settings
   const [maxCapacity, setMaxCapacity] = useState('')
@@ -1468,6 +1574,8 @@ function BackupSection() {
         if (s.publicDisplayEnabled) setDisplayEnabled(s.publicDisplayEnabled === 'true')
         if (s.publicDisplayConnection) setDisplayConnection(String(s.publicDisplayConnection))
         if (s.qrEnabled !== undefined) setQrEnabled(s.qrEnabled === 'true')
+        if (s.backupFrequencyHours) setBackupFreq(String(s.backupFrequencyHours))
+        if (s.backupRetentionDays) setBackupRetention(String(s.backupRetentionDays))
       })
       .catch(() => {})
   }, [])
@@ -1602,9 +1710,9 @@ function BackupSection() {
       <div className="hive-card !rounded-2xl">
         <h3 className="text-sm font-bold text-white flex items-center gap-2 mb-4">
           <Users size={16} className="text-[#F5C518]" />
-          Capacity Settings
+          {t('admin.capacitySettings')}
         </h3>
-        <p className="text-xs text-white/30 mb-4">Set the maximum number of students allowed inside at once. Set to 0 for unlimited.</p>
+        <p className="text-xs text-white/30 mb-4">{t('admin.capacityDesc')}</p>
         <div className="flex items-center gap-3">
           <input
             type="number"
@@ -1620,7 +1728,7 @@ function BackupSection() {
             className="px-4 py-2.5 rounded-lg bg-[#F5C518] hover:bg-[#D5A711] text-black font-bold text-sm transition-all disabled:opacity-40 flex items-center gap-2"
           >
             {savingCapacity ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-            Save
+            {t('admin.save')}
           </button>
           {capacityStatus && <span className="text-xs font-bold text-green-400">{capacityStatus}</span>}
         </div>
@@ -1630,26 +1738,26 @@ function BackupSection() {
       <div className="hive-card !rounded-2xl">
         <h3 className="text-sm font-bold text-white flex items-center gap-2 mb-4">
           <DollarSign size={16} className="text-[#F5C518]" />
-          Plan Pricing
+          {t('admin.planPricing')}
         </h3>
-        <p className="text-xs text-white/30 mb-4">Configure subscription plan prices, visit limits, and durations.</p>
+        <p className="text-xs text-white/30 mb-4">{t('admin.planPricingDesc')}</p>
         <div className="grid grid-cols-3 gap-4">
           {(['Daily', 'Weekly', 'Monthly'] as const).map((plan) => (
             <div key={plan} className="p-4 rounded-xl border border-white/8" style={{ background: 'rgba(255,255,255,0.02)' }}>
               <p className="text-sm font-bold text-[#F5C518] mb-3">{plan}</p>
               <div className="space-y-2">
                 <div>
-                  <label className="text-[9px] font-bold text-white/25 uppercase">Price (JD)</label>
+                  <label className="text-[9px] font-bold text-white/25 uppercase">{t('admin.priceJd')}</label>
                   <input type="number" value={planPrices[plan]} onChange={(e) => setPlanPrices(p => ({ ...p, [plan]: e.target.value }))} min="0" step="0.5"
                     className="w-full bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-sm text-white focus:border-[#F5C518] outline-none mt-1" />
                 </div>
                 <div>
-                  <label className="text-[9px] font-bold text-white/25 uppercase">Visits</label>
+                  <label className="text-[9px] font-bold text-white/25 uppercase">{t('admin.visits')}</label>
                   <input type="number" value={planVisits[plan]} onChange={(e) => setPlanVisits(p => ({ ...p, [plan]: e.target.value }))} min="1"
                     className="w-full bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-sm text-white focus:border-[#F5C518] outline-none mt-1" />
                 </div>
                 <div>
-                  <label className="text-[9px] font-bold text-white/25 uppercase">Calendar Days</label>
+                  <label className="text-[9px] font-bold text-white/25 uppercase">{t('admin.calendarDays')}</label>
                   <input type="number" value={planDays[plan]} onChange={(e) => setPlanDays(p => ({ ...p, [plan]: e.target.value }))} min="1"
                     className="w-full bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-sm text-white focus:border-[#F5C518] outline-none mt-1" />
                 </div>
@@ -1660,7 +1768,7 @@ function BackupSection() {
         <div className="flex items-center gap-3 mt-4">
           <button onClick={handleSavePlans} disabled={savingPlans}
             className="px-4 py-2.5 rounded-lg bg-[#F5C518] hover:bg-[#D5A711] text-black font-bold text-sm transition-all disabled:opacity-40 flex items-center gap-2">
-            {savingPlans ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Save Plans
+            {savingPlans ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} {t('admin.savePlans')}
           </button>
           {planStatus && <span className="text-xs font-bold text-green-400">{planStatus}</span>}
         </div>
@@ -1670,10 +1778,10 @@ function BackupSection() {
       <div className="hive-card !rounded-2xl">
         <h3 className="text-sm font-bold text-white flex items-center gap-2 mb-2">
           <Hash size={16} className="text-[#F5C518]" />
-          QR Code Check-In
+          {t('admin.qrToggle')}
         </h3>
         <p className="text-xs text-white/30 mb-4">
-          Enable QR codes on student profiles for kiosk check-in. Only enable this after deploying to a public URL — QR codes won&apos;t work on localhost.
+          {t('admin.qrDesc')}
         </p>
 
         <div className="flex items-center gap-4 mb-4">
@@ -1683,21 +1791,21 @@ function BackupSection() {
               <div className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-all ${qrEnabled ? 'left-7' : 'left-1'}`} />
             </div>
             <span className={`text-sm font-bold ${qrEnabled ? 'text-[#F5C518]' : 'text-white/30'}`}>
-              {qrEnabled ? 'Enabled' : 'Disabled'}
+              {qrEnabled ? t('admin.qrEnabled') : t('admin.qrDisabled')}
             </span>
           </label>
         </div>
 
         {!qrEnabled && (
           <div className="p-3 rounded-xl bg-amber-500/5 border border-amber-500/15 text-xs text-amber-400/80 mb-4">
-            QR codes are hidden from student profiles. Enable after deploying to a public domain.
+            {t('admin.qrWarning')}
           </div>
         )}
 
         <div className="flex items-center gap-3">
           <button onClick={handleSaveQr} disabled={savingQr}
             className="px-4 py-2.5 rounded-lg bg-[#F5C518] hover:bg-[#D5A711] text-black font-bold text-sm transition-all disabled:opacity-40 flex items-center gap-2">
-            {savingQr ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Save
+            {savingQr ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} {t('admin.save')}
           </button>
           {qrStatus && <span className="text-xs font-bold text-green-400">{qrStatus}</span>}
         </div>
@@ -1707,9 +1815,9 @@ function BackupSection() {
       <div className="hive-card !rounded-2xl">
         <h3 className="text-sm font-bold text-white flex items-center gap-2 mb-4">
           <Monitor size={16} className="text-[#F5C518]" />
-          Public Occupancy Display
+          {t('admin.display')}
         </h3>
-        <p className="text-xs text-white/30 mb-4">Show a live occupancy screen on an external display for students waiting outside.</p>
+        <p className="text-xs text-white/30 mb-4">{t('admin.displayDesc')}</p>
 
         <div className="flex items-center gap-4 mb-4">
           <label className="flex items-center gap-3 cursor-pointer">
@@ -1718,7 +1826,7 @@ function BackupSection() {
               <div className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-all ${displayEnabled ? 'left-7' : 'left-1'}`} />
             </div>
             <span className={`text-sm font-bold ${displayEnabled ? 'text-[#F5C518]' : 'text-white/30'}`}>
-              {displayEnabled ? 'Active' : 'Disabled'}
+              {displayEnabled ? t('admin.displayActive') : t('admin.displayDisabled')}
             </span>
           </label>
         </div>
@@ -1726,7 +1834,7 @@ function BackupSection() {
         {displayEnabled && (
           <div className="space-y-3">
             <div>
-              <label className="text-[10px] font-bold text-white/30 uppercase tracking-wider">Connection Type</label>
+              <label className="text-[10px] font-bold text-white/30 uppercase tracking-wider">{t('admin.connectionType')}</label>
               <select value={displayConnection} onChange={(e) => setDisplayConnection(e.target.value)}
                 className="w-full mt-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white focus:border-[#F5C518] outline-none"
                 style={{ colorScheme: 'dark' }}>
@@ -1745,7 +1853,7 @@ function BackupSection() {
         <div className="flex items-center gap-3 mt-4">
           <button onClick={handleSaveDisplay} disabled={savingDisplay}
             className="px-4 py-2.5 rounded-lg bg-[#F5C518] hover:bg-[#D5A711] text-black font-bold text-sm transition-all disabled:opacity-40 flex items-center gap-2">
-            {savingDisplay ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Save
+            {savingDisplay ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} {t('admin.save')}
           </button>
           {displayStatus && <span className="text-xs font-bold text-green-400">{displayStatus}</span>}
         </div>
@@ -1755,10 +1863,10 @@ function BackupSection() {
       <div className="hive-card !rounded-2xl">
         <h3 className="text-sm font-bold text-white flex items-center gap-2 mb-4">
           <HardDrive size={16} className="text-[#F5C518]" />
-          Database Backup & Restore
+          {t('admin.dbBackup')}
         </h3>
         <p className="text-xs text-white/30 mb-6">
-          Download a copy of the entire HIVE database, or restore from a previous backup file.
+          {t('admin.dbBackupDesc')}
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1769,8 +1877,8 @@ function BackupSection() {
                 <Download size={20} className="text-green-400" />
               </div>
               <div>
-                <p className="text-sm font-bold text-white">Download Backup</p>
-                <p className="text-[10px] text-white/25">Export SQLite database file</p>
+                <p className="text-sm font-bold text-white">{t('admin.downloadBackup')}</p>
+                <p className="text-[10px] text-white/25">{t('admin.exportSqlite')}</p>
               </div>
             </div>
             <button
@@ -1779,7 +1887,7 @@ function BackupSection() {
               className="w-full py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 bg-green-500/10 border border-green-500/20 text-green-400 hover:bg-green-500/20 transition-all disabled:opacity-40"
             >
               {downloading ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
-              {downloading ? 'Downloading...' : 'Download .db File'}
+              {downloading ? t('admin.downloadingDb') : t('admin.downloadDbFile')}
             </button>
           </div>
 
@@ -1790,13 +1898,13 @@ function BackupSection() {
                 <Upload size={20} className="text-red-400" />
               </div>
               <div>
-                <p className="text-sm font-bold text-white">Restore Backup</p>
-                <p className="text-[10px] text-red-400/60">⚠️ Replaces all current data</p>
+                <p className="text-sm font-bold text-white">{t('admin.restoreBackup')}</p>
+                <p className="text-[10px] text-red-400/60">⚠️ {t('admin.replacesData')}</p>
               </div>
             </div>
             <label className="w-full py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 transition-all cursor-pointer">
               {uploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
-              {uploading ? 'Restoring...' : 'Upload .db File'}
+              {uploading ? t('admin.restoringDb') : t('admin.uploadDbFile')}
               <input type="file" accept=".db,.sqlite,.sqlite3" className="hidden" onChange={handleRestore} disabled={uploading} />
             </label>
           </div>
@@ -1809,6 +1917,185 @@ function BackupSection() {
             {status.type === 'success' ? '✓' : '✕'} {status.message}
           </div>
         )}
+      </div>
+
+      {/* Auto-Backup Settings */}
+      <div className="hive-card !rounded-2xl">
+        <h3 className="text-sm font-bold text-white flex items-center gap-2 mb-4">
+          <Clock size={16} className="text-[#F5C518]" />
+          {t('admin.autoBackup')}
+        </h3>
+        <p className="text-xs text-white/30 mb-4">{t('admin.autoBackupDesc')}</p>
+        <div className="flex flex-wrap items-end gap-4 mb-4">
+          <div>
+            <label className="block text-[10px] text-white/40 mb-1">{t('admin.backupFrequency')}</label>
+            <select
+              value={backupFreq}
+              onChange={(e) => setBackupFreq(e.target.value)}
+              className="bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white focus:border-[#F5C518] outline-none"
+            >
+              <option value="6">6h</option>
+              <option value="12">12h</option>
+              <option value="24">24h</option>
+              <option value="48">48h</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-[10px] text-white/40 mb-1">{t('admin.retentionDays')}</label>
+            <select
+              value={backupRetention}
+              onChange={(e) => setBackupRetention(e.target.value)}
+              className="bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white focus:border-[#F5C518] outline-none"
+            >
+              <option value="7">7 {t('admin.daysLabel')}</option>
+              <option value="14">14 {t('admin.daysLabel')}</option>
+              <option value="30">30 {t('admin.daysLabel')}</option>
+              <option value="90">90 {t('admin.daysLabel')}</option>
+            </select>
+          </div>
+          <button
+            onClick={handleSaveBackupSettings}
+            disabled={savingBackupSettings}
+            className="px-4 py-2.5 rounded-lg bg-[#F5C518] hover:bg-[#D5A711] text-black font-bold text-sm transition-all disabled:opacity-40 flex items-center gap-2"
+          >
+            {savingBackupSettings ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+            {t('admin.save')}
+          </button>
+          <button
+            onClick={handleTriggerBackup}
+            disabled={triggering}
+            className="px-4 py-2.5 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-400 hover:bg-blue-500/20 font-bold text-sm transition-all disabled:opacity-40 flex items-center gap-2"
+          >
+            {triggering ? <Loader2 size={14} className="animate-spin" /> : <Database size={14} />}
+            {t('admin.triggerBackup')}
+          </button>
+        </div>
+        {lastSuccess && (
+          <p className="text-xs text-white/30">
+            {t('admin.lastBackup')}: {new Date(lastSuccess.timestamp).toLocaleString()} — {(lastSuccess.fileSize / 1024).toFixed(1)} KB
+          </p>
+        )}
+      </div>
+
+      {/* Backup History */}
+      {backupLogs.length > 0 && (
+        <div className="hive-card !rounded-2xl">
+          <h3 className="text-sm font-bold text-white flex items-center gap-2 mb-4">
+            <ClipboardList size={16} className="text-[#F5C518]" />
+            {t('admin.backupHistory')}
+          </h3>
+          <div className="space-y-2 max-h-64 overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
+            {backupLogs.slice(0, 20).map((log: any) => (
+              <div key={log.id} className={`flex items-center justify-between p-3 rounded-xl border ${log.success ? 'border-green-500/10 bg-green-500/5' : 'border-red-500/10 bg-red-500/5'}`}>
+                <div className="flex items-center gap-3">
+                  <span className={`w-2 h-2 rounded-full ${log.success ? 'bg-green-400' : 'bg-red-400'}`} />
+                  <div>
+                    <p className="text-xs font-medium text-white">{log.fileName || 'Failed'}</p>
+                    <p className="text-[10px] text-white/30">{new Date(log.timestamp).toLocaleString()}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                    log.trigger === 'STARTUP' ? 'bg-blue-500/10 text-blue-400' :
+                    log.trigger === 'SCHEDULED' ? 'bg-purple-500/10 text-purple-400' :
+                    'bg-white/5 text-white/40'
+                  }`}>{log.trigger}</span>
+                  {log.success && <span className="text-[10px] text-white/20">{(log.fileSize / 1024).toFixed(1)} KB</span>}
+                  {log.error && <span className="text-[10px] text-red-400 max-w-[150px] truncate">{log.error}</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ======================== SETTINGS SECTION ======================== */
+function SettingsSection() {
+  const { t } = useI18n()
+  const { toast } = useToast()
+  const [businessName, setBusinessName] = useState('')
+  const [receiptFooter, setReceiptFooter] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    fetch('/api/settings')
+      .then(r => r.ok ? r.json() : {})
+      .then((s: Record<string, string>) => {
+        if (s.businessName) setBusinessName(s.businessName)
+        if (s.receiptFooter) setReceiptFooter(s.receiptFooter)
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      const settings = [
+        { key: 'businessName', value: businessName.trim() || 'HIVE Study House' },
+        { key: 'receiptFooter', value: receiptFooter.trim() },
+      ]
+      let allOk = true
+      for (const s of settings) {
+        const res = await fetch('/api/settings', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(s),
+        })
+        if (!res.ok) allOk = false
+      }
+      toast(allOk ? t('common.saved') : t('common.saveFailed'), allOk ? 'success' : 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (loading) return <div className="flex justify-center py-12"><Loader2 size={24} className="animate-spin text-white/25" /></div>
+
+  return (
+    <div className="space-y-6">
+      <div className="hive-card !rounded-2xl">
+        <h3 className="text-sm font-bold text-white flex items-center gap-2 mb-5">
+          <Monitor size={16} className="text-[#F5C518]" />
+          {t('admin.receiptSettings')}
+        </h3>
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-bold text-white/30 uppercase tracking-wider">{t('admin.businessName')}</label>
+            <input
+              value={businessName}
+              onChange={(e) => setBusinessName(e.target.value)}
+              placeholder={t('admin.businessNamePlaceholder')}
+              className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-sm text-white focus:border-[#F5C518] focus:outline-none focus:ring-1 focus:ring-[#F5C518] placeholder:text-white/20 transition-all"
+              maxLength={100}
+            />
+            <p className="text-[10px] text-white/20">{t('admin.businessNameDesc')}</p>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-bold text-white/30 uppercase tracking-wider">{t('admin.receiptFooter')}</label>
+            <textarea
+              value={receiptFooter}
+              onChange={(e) => setReceiptFooter(e.target.value)}
+              placeholder={t('admin.receiptFooterPlaceholder')}
+              rows={2}
+              className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-sm text-white focus:border-[#F5C518] focus:outline-none focus:ring-1 focus:ring-[#F5C518] placeholder:text-white/20 transition-all resize-none"
+              maxLength={300}
+            />
+            <p className="text-[10px] text-white/20">{t('admin.receiptFooterDesc')}</p>
+          </div>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="px-5 py-2.5 rounded-lg bg-[#F5C518] hover:bg-[#D5A711] text-black font-bold text-sm transition-all flex items-center gap-2 disabled:opacity-40"
+          >
+            {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+            {saving ? '...' : t('common.save')}
+          </button>
+        </div>
       </div>
     </div>
   )

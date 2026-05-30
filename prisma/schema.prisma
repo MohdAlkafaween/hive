@@ -1,12 +1,6 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
-  provider        = "prisma-client-js"
-  output          = "../src/generated/prisma"
-  previewFeatures = ["driverAdapters"]
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
 }
 
 datasource db {
@@ -14,41 +8,54 @@ datasource db {
 }
 
 model User {
-  id          Int              @id @default(autoincrement())
-  email       String           @unique
-  password    String
-  name        String           @default("")
-  phone       String           @default("")
-  role        String           @default("REGISTERATION_COUNTER") // Roles: ADMIN, MANAGER, BARISTA, REGISTERATION_COUNTER
-  permissions String           @default("[]") // JSON array of allowed pages for MANAGER role e.g. ["/","/directory","/stats"]
-  isActive    Boolean          @default(true) // soft-disable accounts without deleting
-  createdById Int?             // which admin created this account
-  createdBy   User?            @relation("CreatedByAdmin", fields: [createdById], references: [id], onDelete: SetNull)
-  createdUsers User[]          @relation("CreatedByAdmin")
-  createdAt   DateTime         @default(now())
-  auditLogs   StaffAuditLog[]
+  id            Int              @id @default(autoincrement())
+  email         String           @unique
+  password      String
+  name          String           @default("")
+  phone         String           @default("")
+  role          String           @default("STAFF") // Roles: ADMIN, MANAGER, STAFF
+  permissions   String           @default("[]") // JSON array of allowed pages for MANAGER role
+  isActive      Boolean          @default(true)
+  createdById   Int?
+  createdBy     User?            @relation("CreatedByAdmin", fields: [createdById], references: [id], onDelete: SetNull)
+  createdUsers  User[]           @relation("CreatedByAdmin")
+  createdAt     DateTime         @default(now())
+  auditLogs            StaffAuditLog[]
+  cashRegisters        CashRegister[]
+  expenses             CafeExpense[]
+  processedLogs        Log[]          @relation("LogProcessedBy")
+  createdSubscriptions Subscription[] @relation("SubscriptionCreatedBy")
 }
 
 model StaffAuditLog {
   id        Int      @id @default(autoincrement())
   userId    Int?
   user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
-  email     String   // denormalized — readable even after user is deleted
-  role      String   // role at time of event
-  event     String   // LOGIN, LOGOUT, PASSWORD_RESET, PASSWORD_RESET_BY_ADMIN
+  email     String
+  role      String
+  event     String
   ip        String   @default("unknown")
-  details   String?  // extra context (e.g., "Reset by admin@hive.study")
+  details   String?
   createdAt DateTime @default(now())
 }
 
 model Student {
   id               Int            @id @default(autoincrement())
+  studentNumber    Int?           @unique // human-readable sequential ID (STD-0001)
   fullName         String
   phone            String         @unique
+  email            String?
   major            String?
+  dateOfBirth      DateTime?
+  gender           String?        // "male", "female", or null
+  emergencyContact String?
+  emergencyPhone   String?
+  university       String?
+  status           String         @default("ACTIVE") // ACTIVE, SUSPENDED, BANNED, GRADUATED
+  referralSource   String?
   rfidUuid         String?        @unique
-  photoUrl         String?        // avatar / photo path
-  qrToken          String?        @unique // unique token for QR code check-in
+  photoUrl         String?
+  qrToken          String?        @unique
   createdAt        DateTime       @default(now())
   lifetimeCheckIns Int            @default(0)
   subscriptions    Subscription[]
@@ -64,7 +71,7 @@ model Subscription {
   id                 Int       @id @default(autoincrement())
   studentId          Int?
   student            Student?  @relation(fields: [studentId], references: [id], onDelete: SetNull)
-  studentName        String    @default("") // denormalized — readable after student deletion
+  studentName        String    @default("")
   planType           String
   startDate          DateTime  @default(now())
   expiryDate         DateTime
@@ -73,61 +80,179 @@ model Subscription {
   isActive           Boolean   @default(true)
   isFrozen           Boolean   @default(false)
   frozenAt           DateTime?
-  freezeDays         Int       @default(0) // total days frozen — added back to expiry on unfreeze
+  freezeDays         Int       @default(0)
+  createdBy          Int?      // staff user ID who sold this subscription
+  createdByUser      User?     @relation("SubscriptionCreatedBy", fields: [createdBy], references: [id], onDelete: SetNull)
+  planId             Int?
+  plan               SubscriptionPlan? @relation(fields: [planId], references: [id], onDelete: SetNull)
   createdAt          DateTime  @default(now())
+
+  @@index([studentId, isActive])
+  @@index([expiryDate])
 }
 
 model Log {
   id           Int       @id @default(autoincrement())
   studentId    Int?
   student      Student?  @relation(fields: [studentId], references: [id], onDelete: SetNull)
-  studentName  String    @default("") // denormalized — readable after student deletion
+  studentName  String    @default("")
   checkInTime  DateTime  @default(now())
   checkOutTime DateTime?
   date         String
+  method          String?   @default("MANUAL") // RFID, QR, MANUAL, SEARCH, AUTO_CHECKOUT
+  processedBy     Int?      // staff user ID, null for kiosk self-check-ins
+  processedByUser User?     @relation("LogProcessedBy", fields: [processedBy], references: [id], onDelete: SetNull)
+
+  @@index([date])
+  @@index([studentId, date])
 }
 
+// NOTE: amountPaid/discountAmount use Float because SQLite stores all numbers as REAL.
+// True Decimal is not available in SQLite. Application-layer rounding (Math.round(x*100)/100)
+// is applied in subscription and transaction creation routes to prevent accumulation errors.
+// TODO: In a future migration to PostgreSQL, convert these to Decimal for exact currency math.
 model Transaction {
-  id             Int      @id @default(autoincrement())
+  id             Int       @id @default(autoincrement())
   studentId      Int?
-  student        Student? @relation(fields: [studentId], references: [id], onDelete: SetNull)
-  studentName    String   @default("") // denormalized — readable after student deletion
+  student        Student?  @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  studentName    String    @default("")
   amountPaid     Float
   planType       String
   gateway        String
-  discountAmount Float    @default(0)
-  createdAt      DateTime @default(now())
+  discountAmount Float     @default(0)
+  receiptNumber  String?   // e.g., "RCP-00012" — shared with barista orders for unified receipts
+  type           String    @default("SALE") // SALE, REFUND, VOID
+  voidedAt       DateTime?
+  voidedBy       Int?      // staff user ID who voided
+  voidReason     String?
+  refundOf       Int?      // links to original transaction ID for refunds
+  createdAt      DateTime  @default(now())
+
+  @@index([createdAt])
+}
+
+// ─── CAFÉ / BARISTA ───
+
+model MenuCategory {
+  id        Int        @id @default(autoincrement())
+  name      String
+  nameAr    String?
+  sortOrder Int        @default(0)
+  isActive  Boolean    @default(true)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @default(now())
+  items     MenuItem[]
 }
 
 model MenuItem {
-  id           Int            @id @default(autoincrement())
+  id           Int                @id @default(autoincrement())
   name         String
+  nameAr       String?
   price        Float
+  costPrice    Float              @default(0) // cost to the business
   imageUrl     String?
-  isOutOfStock Boolean        @default(false)
-  createdAt    DateTime       @default(now())
+  isOutOfStock Boolean            @default(false)
+  isDeleted    Boolean            @default(false) // soft-delete: hides from menu but preserves order history
+  isCustom     Boolean            @default(false) // true for ad-hoc custom items created during orders
+  categoryId   Int?
+  category     MenuCategory?      @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  createdAt    DateTime           @default(now())
   orders       BaristaOrder[]
+  options      MenuItemOption[]
+}
+
+model MenuItemOption {
+  id         Int                   @id @default(autoincrement())
+  menuItemId Int
+  menuItem   MenuItem              @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  name       String                // e.g., "Size", "Topping"
+  nameAr     String?
+  type       String                @default("ADD_TO_PRICE") // ADD_TO_PRICE or SET_PRICE
+  required   Boolean               @default(false)
+  sortOrder  Int                   @default(0)
+  values     MenuItemOptionValue[]
+}
+
+model MenuItemOptionValue {
+  id        Int            @id @default(autoincrement())
+  optionId  Int
+  option    MenuItemOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  label     String         // e.g., "Small", "Large"
+  labelAr   String?
+  price     Float          // price to add or set
+  costPrice Float          @default(0)
+  isDefault Boolean        @default(false)
+  sortOrder Int            @default(0)
 }
 
 model BaristaOrder {
-  id          Int       @id @default(autoincrement())
-  menuItemId  Int
-  menuItem    MenuItem  @relation(fields: [menuItemId], references: [id])
-  studentId   Int?
-  student     Student?  @relation(fields: [studentId], references: [id], onDelete: SetNull)
-  quantity    Int       @default(1)
-  totalPrice  Float
-  createdAt   DateTime  @default(now())
+  id              Int           @id @default(autoincrement())
+  menuItemId      Int?
+  menuItem        MenuItem?     @relation(fields: [menuItemId], references: [id], onDelete: SetNull)
+  studentId       Int?
+  student         Student?      @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  registerId      Int?          // Links to the CashRegister used at time of sale
+  register        CashRegister? @relation(fields: [registerId], references: [id], onDelete: SetNull)
+  quantity        Int           @default(1)
+  totalPrice      Float
+  costPrice       Float         @default(0) // snapshot cost at time of sale
+  finalPrice      Float         @default(0) // actual charged price after options
+  selectedOptions String        @default("[]") // JSON of selected options
+  paymentMethod   String        @default("CASH") // CASH, CARD, OTHER
+  receiptNumber   String?       // e.g., "RCP-00001"
+  createdAt       DateTime      @default(now())
+
+  @@index([createdAt])
 }
+
+// ─── EXPENSES ───
+
+model CafeExpense {
+  id          Int      @id @default(autoincrement())
+  description String
+  amount      Float
+  date        DateTime @default(now())
+  category    String?  // Ingredients, Supplies, Utilities, etc.
+  addedBy     Int
+  user        User     @relation(fields: [addedBy], references: [id])
+  addedByName String   @default("")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now())
+}
+
+// ─── CASH REGISTER ───
+
+model CashRegister {
+  id              Int       @id @default(autoincrement())
+  shiftId         Int?
+  shift           StaffShift? @relation(fields: [shiftId], references: [id], onDelete: SetNull)
+  userId          Int
+  user            User      @relation(fields: [userId], references: [id])
+  userName        String    @default("")
+  date            DateTime  @default(now())
+  openingCash     Float
+  closingCash     Float?
+  expectedCash    Float?
+  cashSales       Float     @default(0)
+  cardSales       Float     @default(0)
+  cashDiscrepancy Float?
+  notes           String?
+  status          String    @default("OPEN") // OPEN or CLOSED
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @default(now())
+  baristaOrders   BaristaOrder[]
+}
+
+// ─── PROMOS ───
 
 model PromoCode {
   id              Int          @id @default(autoincrement())
   code            String       @unique
-  discountType    String       @default("AMOUNT") // AMOUNT, PERCENTAGE, or BONUS_ENTRIES
-  discountAmount  Float        // Fixed JD, percentage value, or 0 for BONUS_ENTRIES
-  bonusEntries    Int          @default(0) // number of bonus visits to add (for BONUS_ENTRIES type)
+  discountType    String       @default("AMOUNT")
+  discountAmount  Float
+  bonusEntries    Int          @default(0)
   isActive        Boolean      @default(true)
-  maxUses         Int          @default(0) // 0 = unlimited
+  maxUses         Int          @default(0)
   timesUsed       Int          @default(0)
   expiresAt       DateTime?
   createdAt       DateTime     @default(now())
@@ -140,8 +265,8 @@ model PromoUsage {
   promoCode   PromoCode @relation(fields: [promoCodeId], references: [id])
   studentId   Int?
   student     Student?  @relation(fields: [studentId], references: [id], onDelete: SetNull)
-  studentName String    @default("") // denormalized — readable after student deletion
-  discount    Float     // actual discount applied
+  studentName String    @default("")
+  discount    Float
   createdAt   DateTime  @default(now())
 }
 
@@ -150,19 +275,20 @@ model StudentNote {
   studentId Int
   student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
   content   String
-  authorId  Int?     // staff user who wrote the note
+  authorId  Int?
   authorName String  @default("")
   createdAt DateTime @default(now())
 }
 
 model StaffShift {
-  id         Int       @id @default(autoincrement())
-  userId     Int
-  email      String    // denormalized
-  role       String
-  clockIn    DateTime  @default(now())
-  clockOut   DateTime?
-  date       String    // YYYY-MM-DD for easy queries
+  id            Int            @id @default(autoincrement())
+  userId        Int
+  email         String
+  role          String
+  clockIn       DateTime       @default(now())
+  clockOut      DateTime?
+  date          String
+  cashRegisters CashRegister[]
 }
 
 model AppSetting {
@@ -175,8 +301,35 @@ model WaitlistEntry {
   id        Int      @id @default(autoincrement())
   studentId Int
   student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  date      String   // YYYY-MM-DD
-  position  Int      // queue position
-  status    String   @default("WAITING") // WAITING, ADMITTED, CANCELLED
+  date      String
+  position  Int
+  status    String   @default("WAITING")
   createdAt DateTime @default(now())
+}
+
+// ─── BACKUP ───
+
+model BackupLog {
+  id        Int      @id @default(autoincrement())
+  timestamp DateTime @default(now())
+  fileName  String
+  fileSize  Int
+  success   Boolean
+  error     String?
+  trigger   String   @default("MANUAL") // MANUAL, SCHEDULED, STARTUP
+}
+
+// ─── SUBSCRIPTION PLANS ───
+
+model SubscriptionPlan {
+  id            Int            @id @default(autoincrement())
+  name          String
+  nameAr        String?
+  durationDays  Int
+  totalVisits   Int            // -1 for unlimited
+  price         Float
+  isActive      Boolean        @default(true)
+  sortOrder     Int            @default(0)
+  createdAt     DateTime       @default(now())
+  subscriptions Subscription[]
 }

@@ -1,7 +1,7 @@
 # HIVE — Complete User Manual & Technical Documentation
 
-**Version:** 1.0
-**Last Updated:** May 25, 2026
+**Version:** 1.1
+**Last verified against codebase:** 2026-05-29
 **System:** HIVE Coworking Space Management System
 **Developed for:** Hive.space Study House — Amman, Jordan
 
@@ -29,6 +29,7 @@
 18. [Keyboard Shortcuts](#18-keyboard-shortcuts)
 19. [Daily Workflow (How to Use HIVE Day-to-Day)](#19-daily-workflow)
 20. [Troubleshooting](#20-troubleshooting)
+21. [Environment Variables Reference](#21-environment-variables-reference)
 
 ---
 
@@ -106,11 +107,33 @@ The entire system runs **locally on your computer** — no internet required, no
    ```
    npx prisma db push
    ```
-3. This creates the database file (`dev.db`) in the hive folder
+3. This creates the database file (`dev.db`) in the `prisma` folder
 
-#### Step 5: Set Up the Admin Account
+#### Step 5: Set the Secret Key and Environment
 
-1. In the same command window, type:
+1. Copy `.env.example` to `.env`:
+   ```
+   copy .env.example .env
+   ```
+2. Open the file `hive\.env` in Notepad
+3. Set a strong random JWT secret:
+   ```
+   JWT_SECRET="paste-a-long-random-string-here"
+   ```
+   Generate one by running: `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`
+4. Set the seed admin password:
+   ```
+   SEED_ADMIN_PASSWORD=YourStrongPassword123!
+   ```
+5. Enable the seed endpoint temporarily:
+   ```
+   ALLOW_SEED=true
+   ```
+6. Save the file
+
+#### Step 6: Create the Admin Account
+
+1. In the command window, start the app:
    ```
    npm run dev
    ```
@@ -118,40 +141,27 @@ The entire system runs **locally on your computer** — no internet required, no
 3. Open a **new** command window (Windows + R, cmd, Enter)
 4. Type:
    ```
-   curl -X POST http://localhost:3000/api/auth/seed
+   curl http://localhost:3000/api/auth/seed
    ```
-5. This creates the default admin account
-
-#### Step 6: Set the Secret Key
-
-1. Open the file `hive\.env` in Notepad
-2. Change the line:
-   ```
-   JWT_SECRET="change-me-in-production-use-openssl-rand"
-   ```
-   To something long and random, like:
-   ```
-   JWT_SECRET="myHiveStudyHouse2026SecretKeyThatIsVeryLongAndRandom123!@#"
-   ```
-3. Save the file
-4. Restart the app (see Section 3)
-
-**Installation is complete!**
+5. This creates the admin account with the email `admin@hive.study` (or whatever you set in `SEED_ADMIN_EMAIL`)
+6. **Important:** Now go back to `.env` and set `ALLOW_SEED=false` to disable the seed endpoint
+7. Restart the app (Ctrl+C, then `npm run dev`)
 
 #### Step 7 (Optional): Set Up Daily Backup
 
-1. Open the file `hive\backup.bat` in Notepad
-2. Change the `BACKUP_DIR` line to point to your backup folder:
+1. Set the `BACKUP_DIR` environment variable in `.env`:
    ```
-   set BACKUP_DIR=C:\Users\YourName\OneDrive\HIVE_Backups
+   BACKUP_DIR=C:\Users\YourName\OneDrive\HIVE_Backups
    ```
    (Use your Google Drive, OneDrive, or a USB drive path)
-3. Open **Windows Task Scheduler** (search for it in the Start menu)
-4. Click "Create Basic Task"
-5. Name it "HIVE Backup"
-6. Set it to run **Daily** at **11:50 PM**
-7. Action: "Start a Program" — browse to `hive\backup.bat`
-8. Click Finish
+2. Open **Windows Task Scheduler** (search for it in the Start menu)
+3. Click "Create Basic Task"
+4. Name it "HIVE Backup"
+5. Set it to run **Daily** at **11:50 PM**
+6. Action: "Start a Program" — browse to `hive\backup.bat`
+7. Click Finish
+
+**Installation is complete!**
 
 ---
 
@@ -192,24 +202,26 @@ The entire system runs **locally on your computer** — no internet required, no
 
 HIVE has three staff roles. Each role can only see and do certain things:
 
-| Feature | ADMIN | BARISTA | REGISTRATION COUNTER |
-|---------|-------|---------|---------------------|
-| Dashboard (check-ins) | Yes | No | Yes |
-| Student Directory | Yes | No | Yes |
-| Logs (history) | Yes | No | Yes |
-| Statistics & Export | Yes | No | No |
-| Barista POS | Yes | Yes | No |
-| Admin Panel | Yes | No | No |
-| Kiosk Mode | Yes | No | Yes |
+| Feature | ADMIN | MANAGER | STAFF |
+|---------|-------|---------|-------|
+| Dashboard (check-ins) | Yes | Per permissions | Yes |
+| Student Directory | Yes | Per permissions | Yes |
+| Logs (history) | Yes | Per permissions | Yes |
+| Statistics & Export | Yes | Per permissions | No |
+| Barista POS | Yes | Per permissions | Yes |
+| Admin Panel | Yes | Per permissions | No |
+| Kiosk Mode | Yes | Yes | Yes |
 | Reset passwords | Yes | No | No |
 | Create promo codes | Yes | No | No |
 | View audit logs | Yes | No | No |
 | Create staff accounts | Yes | No | No |
 
+**MANAGER** is a flexible role — the ADMIN assigns specific page permissions to each MANAGER when creating their account. A MANAGER can only access the pages they were granted.
+
 ### Default Admin Account
 
-- **Email:** `Hive.study@admin.jordan`
-- **Password:** `admin123`
+- **Email:** `admin@hive.study` (or the value of `SEED_ADMIN_EMAIL` env var)
+- **Password:** The value of `SEED_ADMIN_PASSWORD` env var, or `Admin@1234` if not set
 
 **Change this password immediately after first login** using the Admin Panel > Staff & Passwords tab.
 
@@ -223,17 +235,17 @@ This is the first screen you see. It has two fields:
 
 | Input | What to Enter |
 |-------|--------------|
-| **EMAIL** | Your staff email address (e.g., `Hive.study@admin.jordan`) |
+| **EMAIL** | Your staff email address (e.g., `admin@hive.study`) |
 | **PASSWORD** | Your password |
 
 **Button:**
-- **Sign In** — Checks your credentials and logs you in. If correct, you are taken to the Dashboard (or Barista POS if you are a Barista).
+- **Sign In** — Checks your credentials and logs you in. If correct, you are taken to the Dashboard.
 
 **What can go wrong:**
 - "Invalid credentials" — wrong email or password
 - "Too many login attempts" — you tried too many times. Wait 15 minutes and try again.
 
-**Note:** The login page has no navigation bar, no sidebar, no footer. It is a clean full-screen card.
+**Note:** The login page has no navigation bar, no sidebar, no footer. It is a clean full-screen card with a dark theme.
 
 ---
 
@@ -245,13 +257,13 @@ The icons you see depend on your role:
 
 | Icon | Page | Visible To |
 |------|------|-----------|
-| Checkmark person | Dashboard | Admin, Counter |
-| Two people | Directory | Admin, Counter |
-| Scroll | Logs | Admin, Counter |
-| Bar chart | Statistics | Admin only |
-| Coffee cup | Barista POS | Admin, Barista |
-| Shield | Admin Panel | Admin only |
-| Scan line | Kiosk Mode | Admin, Counter |
+| Checkmark person | Dashboard | ADMIN, MANAGER (if permitted), STAFF |
+| Two people | Directory | ADMIN, MANAGER (if permitted), STAFF |
+| Scroll | Logs | ADMIN, MANAGER (if permitted), STAFF |
+| Bar chart | Statistics | ADMIN, MANAGER (if permitted) |
+| Coffee cup | Barista POS | ADMIN, MANAGER (if permitted), STAFF |
+| Shield | Admin Panel | ADMIN, MANAGER (if permitted) |
+| Scan line | Kiosk Mode | All roles |
 
 The **Kiosk Mode** button opens in a **new browser tab** so your main workspace is not disrupted.
 
@@ -270,7 +282,7 @@ At the very top of the screen there is a bar showing:
 ## 7. Page 1: Dashboard (Main Check-In Screen)
 
 **URL:** `http://localhost:3000/`
-**Who can access:** Admin, Registration Counter
+**Who can access:** ADMIN, MANAGER (if permitted), STAFF
 
 This is the primary screen used by the front desk staff. It has two main sections:
 
@@ -344,7 +356,7 @@ Shows a confirmation with the student's details and a receipt breakdown.
 ## 8. Page 2: Student Directory
 
 **URL:** `http://localhost:3000/directory`
-**Who can access:** Admin, Registration Counter
+**Who can access:** ADMIN, MANAGER (if permitted), STAFF
 
 A searchable list of every registered student.
 
@@ -408,7 +420,7 @@ When you click on a student, their full profile opens:
 ## 9. Page 3: Logs
 
 **URL:** `http://localhost:3000/logs`
-**Who can access:** Admin, Registration Counter
+**Who can access:** ADMIN, MANAGER (if permitted), STAFF
 
 A historical record browser with two tabs:
 
@@ -437,7 +449,7 @@ Shows a calendar-style list of dates with daily revenue totals.
 ## 10. Page 4: Statistics
 
 **URL:** `http://localhost:3000/stats`
-**Who can access:** Admin only
+**Who can access:** ADMIN, MANAGER (if permitted)
 
 Daily financial and activity dashboard.
 
@@ -480,7 +492,7 @@ A detailed table of every transaction for the selected date:
 ## 11. Page 5: Barista POS
 
 **URL:** `http://localhost:3000/barista`
-**Who can access:** Admin, Barista
+**Who can access:** ADMIN, MANAGER (if permitted), STAFF
 
 The coffee bar point-of-sale system. Split into two sections:
 
@@ -494,7 +506,7 @@ Shows all menu items as cards with an image, name, and price.
 |---------|-------------|
 | **Item card** | Shows the item image, name, and price |
 | **Out of Stock toggle** | Mark an item as unavailable (grays it out) |
-| **Delete button (trash icon)** | Remove the item from the menu permanently |
+| **Delete button (trash icon)** | Soft-deletes the item from the menu (hides it but preserves order history) |
 
 **Add New Item Form (at the bottom):**
 
@@ -522,9 +534,9 @@ Shows all menu items as cards with an image, name, and price.
 ## 12. Page 6: Admin Panel
 
 **URL:** `http://localhost:3000/admin`
-**Who can access:** Admin only
+**Who can access:** ADMIN, MANAGER (if permitted)
 
-The admin control center has three tabs:
+The admin control center has multiple tabs:
 
 ### Tab 1: Promo Codes
 
@@ -559,7 +571,7 @@ Manage staff accounts and reset passwords.
 **Staff List:**
 Each staff member shows:
 - **Email address**
-- **Role badge** (ADMIN, BARISTA, or COUNTER)
+- **Role badge** (ADMIN, MANAGER, or STAFF)
 - **Join date**
 - **Reset button** — click to reset their password
 
@@ -576,11 +588,12 @@ Each staff member shows:
 |-------|--------------|
 | **Email** | The staff member's email address |
 | **Password** | A strong password (8+ chars, letter + number) |
-| **Role** | "Registration Counter" or "Barista" (dropdown) |
+| **Role** | "STAFF" or "MANAGER" (dropdown) |
+| **Permissions** | For MANAGER only — select which pages they can access |
 
 - **Create Account** button saves the new staff account
 
-**Note:** You cannot create another ADMIN account through this form. Only ADMIN and the initial seed command can create admin accounts.
+**Note:** You cannot create another ADMIN account through this form. The ADMIN role can only be assigned via direct database access or the initial seed.
 
 ### Tab 3: Staff Audit Log
 
@@ -594,7 +607,7 @@ A security log showing every staff login and logout event.
 
 | Column | What It Shows |
 |--------|-------------|
-| **Event** | LOGIN (green badge), LOGOUT (red badge), or PASSWORD_RESET (golden badge) |
+| **Event** | LOGIN (green badge), LOGOUT (red badge), or PASSWORD_RESET_BY_ADMIN (golden badge) |
 | **Staff Member** | Email of the staff who performed the action |
 | **Role** | Their role at the time of the event |
 | **IP Address** | Where the action came from |
@@ -610,7 +623,7 @@ A security log showing every staff login and logout event.
 **URL:** `http://localhost:3000/checkin` (opens in new tab)
 **Who can access:** Everyone (no login required — this is the student-facing screen)
 
-This is the screen you put on a **separate monitor or tablet** facing the students. It allows them to check themselves in.
+This is the screen you put on a **separate monitor or tablet** facing the students. It allows them to check themselves in. The kiosk supports both English and Arabic.
 
 ### Two Modes:
 
@@ -633,9 +646,9 @@ Each student result shows:
 - Shows the result (success with student name, or error if not found/expired)
 
 **Status Messages:**
-- **Green:** "Welcome, [Name]!" — check-in successful, shows visits remaining
-- **Yellow:** "Almost there" — subscription is nearly expired or low on visits
-- **Red:** "Not Found" or "Subscription Expired" — cannot check in
+- **Green:** Check-in successful, shows visits remaining
+- **Yellow:** Subscription is nearly expired or low on visits
+- **Red:** Not found or subscription expired — cannot check in
 
 ---
 
@@ -721,16 +734,16 @@ HIVE has three subscription plans:
 
 ### Where is the Data Stored?
 
-All data is stored in a single file: `hive\dev.db`
+All data is stored in a single file: `hive\prisma\dev.db`
 
 This is an **SQLite database** file. It contains everything: students, subscriptions, check-in logs, barista orders, transactions, promo codes, staff accounts, and audit logs.
 
 ### Automatic Backups
 
-The `backup.bat` script copies `dev.db` to your backup folder with a date stamp.
+The `backup.bat` script copies `prisma\dev.db` to your backup folder with a date stamp.
 
 **To set up automatic daily backups:**
-1. Edit `backup.bat` and change the `BACKUP_DIR` to your preferred location
+1. Set `BACKUP_DIR` in your `.env` file to your preferred backup location (or the script falls back to a `backups` folder next to the script)
 2. Schedule it in Windows Task Scheduler (see Installation Guide, Step 7)
 
 **Backup files are named:** `db_backup_HIVE_2026-05-25.db`
@@ -739,15 +752,15 @@ The `backup.bat` script copies `dev.db` to your backup folder with a date stamp.
 
 To make a quick manual backup:
 1. Make sure HIVE is stopped (Ctrl+C in the command window)
-2. Copy the file `hive\dev.db` to a safe location (USB drive, cloud folder, etc.)
+2. Copy the file `hive\prisma\dev.db` to a safe location (USB drive, cloud folder, etc.)
 3. Restart HIVE
 
 ### Restoring from Backup
 
 If something goes wrong and you need to restore:
 1. Stop HIVE (Ctrl+C)
-2. Rename the current `dev.db` to `dev.db.broken` (keep it just in case)
-3. Copy your backup file and rename it to `dev.db`
+2. Rename the current `prisma\dev.db` to `prisma\dev.db.broken` (keep it just in case)
+3. Copy your backup file into `prisma\` and rename it to `dev.db`
 4. Start HIVE again
 
 **Important:** Never delete `dev.db` while HIVE is running. Always stop the app first.
@@ -762,6 +775,9 @@ Here is everything HIVE stores and how the pieces connect:
 - Full name, phone number (unique — no two students can have the same phone)
 - Major/field of study (optional)
 - RFID card UUID (optional, unique)
+- QR token (auto-generated, unique)
+- Student number (auto-assigned)
+- Photo URL (optional)
 - Registration date
 - Lifetime check-in count
 
@@ -770,6 +786,7 @@ Here is everything HIVE stores and how the pieces connect:
 - Start date and expiry date
 - Total visits allowed and visits used
 - Active/inactive status
+- Freeze status (can be temporarily frozen)
 - A student can have multiple subscriptions over time (only the latest active one matters)
 
 ### Check-In Logs (linked to a Student)
@@ -782,17 +799,31 @@ Here is everything HIVE stores and how the pieces connect:
 - Plan type purchased
 - Payment method (Cash, CliQ, eFAWATEERcom, Credit Card)
 - Discount amount (if a promo code was used)
+- Receipt number (shared with barista orders for unified receipts)
 - Date/time
 
 ### Menu Items
-- Item name, price
+- Item name, price, cost price
 - Image URL (optional)
+- Category (optional)
+- Customizable options and option values
 - Out-of-stock flag
+- Soft-delete flag (hidden but preserved for order history)
 
-### Barista Orders (linked to a Menu Item)
+### Barista Orders (linked to a Menu Item and optionally a Student)
 - Quantity ordered
-- Total price
+- Total price, cost price, final price
+- Selected options (JSON)
+- Payment method (CASH, CARD, OTHER)
+- Receipt number
+- Linked cash register
 - Date/time
+
+### Cash Registers
+- Opening and closing cash amounts
+- Cash sales and card sales totals
+- Discrepancy tracking
+- Linked to staff shift
 
 ### Promo Codes
 - Code text (unique, uppercase)
@@ -812,15 +843,31 @@ Here is everything HIVE stores and how the pieces connect:
 ### Staff Users
 - Email (unique)
 - Password (hashed — not stored in plain text)
-- Role (ADMIN, BARISTA, or REGISTERATION_COUNTER)
+- Name, phone
+- Role: `ADMIN`, `MANAGER`, or `STAFF`
+- Permissions (JSON array of allowed pages — for MANAGER role)
 - Account creation date
 
 ### Staff Audit Logs (linked to a User)
 - User email and role (at time of event)
-- Event type (LOGIN, LOGOUT, PASSWORD_RESET_BY_ADMIN)
+- Event type (LOGIN, LOGOUT, PASSWORD_RESET_BY_ADMIN, LOGS_CLEANUP, DB_RESTORE, STAFF_DELETED)
 - IP address
 - Extra details
 - Timestamp
+
+### Staff Shifts
+- Clock-in and clock-out times
+- Date
+- Linked to user
+
+### Waitlist Entries (linked to a Student)
+- Date, position in queue
+- Status (WAITING, ADMITTED, CANCELLED)
+
+### Student Notes (linked to a Student)
+- Content text
+- Author (staff who wrote the note)
+- Date/time
 
 ---
 
@@ -846,7 +893,7 @@ Here is how a typical day looks when using HIVE:
 4. Log in with your staff account
 5. If using a kiosk screen: click the "Kiosk Mode" icon in the sidebar (opens in new tab), drag the new tab to the student-facing screen
 
-### During the Day — Registration Counter Staff
+### During the Day — Front Desk Staff
 
 **When a new student walks in:**
 1. Press **F2** to open the Add Student form
@@ -873,8 +920,8 @@ Here is how a typical day looks when using HIVE:
 
 ### During the Day — Barista Staff
 
-1. Log in with barista account
-2. You will see the Barista POS page
+1. Log in with your staff account
+2. Navigate to the Barista POS page
 3. When a customer orders, adjust the quantity for each item
 4. Click the order button to record the sale
 
@@ -900,18 +947,15 @@ Here is how a typical day looks when using HIVE:
 
 If you forgot the admin password and cannot log in:
 1. Stop HIVE (Ctrl+C)
-2. Open a command window in the hive folder
-3. Run: `curl -X POST http://localhost:3000/api/auth/seed`
-4. This resets the admin account to `admin123`
-5. Log in and change the password immediately
-
-If the seed doesn't work (admin already exists), you'll need to delete and recreate the database:
-1. Stop HIVE
-2. Delete `dev.db` from the hive folder
-3. Run: `npx prisma db push`
-4. Start HIVE: `npm run dev`
-5. Run the seed: `curl -X POST http://localhost:3000/api/auth/seed`
-6. **Warning:** This erases ALL data (students, subscriptions, everything)
+2. You will need to delete the database and start fresh:
+   - Delete `prisma\dev.db` from the hive folder
+   - Run: `npx prisma db push`
+   - Set `ALLOW_SEED=true` in `.env`
+   - Start HIVE: `npm run dev`
+   - Run the seed: `curl http://localhost:3000/api/auth/seed`
+   - Set `ALLOW_SEED=false` in `.env` and restart
+   - **Warning:** This erases ALL data (students, subscriptions, everything)
+3. If you have a backup, restore it instead (see Section 16)
 
 ### "RFID scanner not working"
 
@@ -937,7 +981,7 @@ If the seed doesn't work (admin already exists), you'll need to delete and recre
 ### "How do I move HIVE to a new computer?"
 
 1. Copy the entire `hive` folder to the new computer
-2. Make sure to include the `dev.db` file (this has all your data)
+2. Make sure to include the `prisma\dev.db` file (this has all your data)
 3. Follow the Installation Guide (Section 2) from Step 1
 4. At Step 4, skip "npx prisma db push" since you already have a database
 5. Just run `npx prisma generate` and then `npm run dev`
@@ -947,8 +991,27 @@ If the seed doesn't work (admin already exists), you'll need to delete and recre
 Yes! Since HIVE runs on one computer but is accessed through a web browser, you can:
 - Open multiple browser tabs on the same computer
 - Access it from other computers on the same network by using the computer's IP address instead of "localhost" (e.g., `http://192.168.1.100:3000`)
+- Set `DEV_ORIGINS` in `.env` to allow connections from other devices on your network
 - The kiosk screen and the staff screen can run simultaneously
 
 ---
 
-*This manual covers HIVE version 1.0. For technical questions or issues not covered here, consult the development team.*
+## 21. Environment Variables Reference
+
+All environment variables are defined in `.env` (copy from `.env.example` on first setup).
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `JWT_SECRET` | **Yes** (production) | Dev fallback | Secret key for session tokens. Generate with: `openssl rand -base64 32` |
+| `DATABASE_URL` | No | `file:./dev.db` | SQLite database file path |
+| `SEED_ADMIN_EMAIL` | No | `admin@hive.study` | Email for the initial admin account (used by seed endpoint) |
+| `SEED_ADMIN_PASSWORD` | **Yes** (production) | `Admin@1234` | Password for the initial admin account |
+| `ALLOW_SEED` | No | `false` | Set to `true` to enable the `/api/auth/seed` endpoint. Disable after setup. |
+| `TRUST_PROXY` | No | `false` | Set to `true` when behind a reverse proxy (Nginx, Cloudflare). Required for correct IP-based rate limiting. |
+| `BACKUP_DIR` | No | `./backups` | Absolute path for database backup destination |
+| `DEV_ORIGINS` | No | (none) | Comma-separated IPs for network access (e.g., `192.168.1.100,192.168.1.101`) |
+| `NODE_ENV` | No | Set by Next.js | Override only if needed. `production` enforces strict security. |
+
+---
+
+*This manual covers HIVE version 1.1. Last verified against codebase on 2026-05-29. For technical questions or issues not covered here, consult the development team.*

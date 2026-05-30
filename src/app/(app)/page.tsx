@@ -1,14 +1,16 @@
 'use client'
 import { useState, useCallback, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { UserPlus, LogIn, X, Calendar, Clock, CreditCard, CheckCircle2, AlertTriangle, XCircle, Loader2 } from 'lucide-react'
+import { UserPlus, LogIn, X, Calendar, Clock, CreditCard, CheckCircle2, AlertTriangle, XCircle, Loader2, Megaphone } from 'lucide-react'
 import { SearchBar } from '@/components/dashboard/SearchBar'
 import { TodayFeedTable } from '@/components/dashboard/TodayFeedTable'
 import { AddStudentModal } from '@/components/dashboard/AddStudentModal'
 import { DashboardStats } from '@/components/dashboard/DashboardStats'
 import { ExpiryBanner } from '@/components/dashboard/ExpiryBanner'
+import { WaitlistPanel } from '@/components/dashboard/WaitlistPanel'
 import { PageTransition } from '@/components/animations/PageTransition'
 import { useHiveStore } from '@/lib/store'
+import { useI18n } from '@/lib/i18n'
 // ReceiptModal is now handled inside AddStudentModal
 
 interface SelectedStudent {
@@ -33,9 +35,15 @@ export default function DashboardPage() {
   const [logCount, setLogCount] = useState(0)
   const { setOverlay, setAddStudentOpen } = useHiveStore()
   const [userRole, setUserRole] = useState<string | null>(null)
+  const { t } = useI18n()
+
+  const [announcement, setAnnouncement] = useState('')
 
   useEffect(() => {
     fetch('/api/auth/me').then(r => r.json()).then(d => { if (d.user) setUserRole(d.user.role) }).catch(() => {})
+    fetch('/api/settings').then(r => r.ok ? r.json() : {}).then((s: Record<string, string>) => {
+      if (s.announcement) setAnnouncement(s.announcement)
+    }).catch(() => {})
   }, [])
 
   // receipt is handled inside AddStudentModal now
@@ -107,7 +115,7 @@ export default function DashboardPage() {
       if (res.ok && (data.status === 'OK' || data.status === 'ALREADY_IN')) {
         if (data.status === 'ALREADY_IN') {
           setCheckInStatus('warning')
-          setCheckInMsg('Already checked in — student is still inside.')
+          setCheckInMsg(t('dash.alreadyCheckedIn'))
         } else {
           let visitsLeft = data.remainingVisits
           let daysLeft = 999
@@ -117,10 +125,10 @@ export default function DashboardPage() {
 
           if ((visitsLeft !== null && visitsLeft !== undefined && visitsLeft <= 2) || daysLeft <= 2) {
             setCheckInStatus('warning')
-            setCheckInMsg(`Checked in! Subscription expiring soon (${visitsLeft !== null ? visitsLeft + ' visits' : daysLeft + ' days'} left)`)
+            setCheckInMsg(`${t('dash.checkedInSuccess')} (${visitsLeft !== null ? visitsLeft + ' ' + t('dash.visitsLeft') : daysLeft + ' ' + t('dash.daysLeft')})`)
           } else {
             setCheckInStatus('success')
-            setCheckInMsg(data.alreadyCheckedInToday ? 'Already checked in today — welcome back!' : 'Checked in successfully!')
+            setCheckInMsg(data.alreadyCheckedInToday ? t('dash.checkedInBack') : t('dash.checkedInSuccess'))
           }
         }
         setRefreshTrigger((n) => n + 1)
@@ -131,27 +139,27 @@ export default function DashboardPage() {
         }
       } else {
         setCheckInStatus('error')
-        setCheckInMsg(data.reason || 'Check-in failed — subscription may be expired.')
+        setCheckInMsg(data.reason || t('dash.checkInFailed'))
       }
     } catch {
       setCheckInStatus('error')
-      setCheckInMsg('Connection error. Please try again.')
+      setCheckInMsg(t('dash.connectionError'))
     }
-  }, [selected, setOverlay])
+  }, [selected, setOverlay, t])
 
   // Subscription status helpers
   function getSubStatus(sub: SubInfo | null): { label: string; color: string; daysLeft: number | null; visitsLeft: number | null } {
-    if (!sub) return { label: 'No Subscription', color: 'red', daysLeft: null, visitsLeft: null }
+    if (!sub) return { label: t('dash.noSubscription'), color: 'red', daysLeft: null, visitsLeft: null }
     const now = new Date()
     const expiry = new Date(sub.expiryDate)
     const daysLeft = Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
     const visitsLeft = sub.planType === 'Daily' ? null : sub.totalVisitsAllowed - sub.visitsUsed
 
-    if (!sub.isActive) return { label: 'Inactive', color: 'red', daysLeft, visitsLeft }
-    if (daysLeft <= 0) return { label: 'Expired', color: 'red', daysLeft: 0, visitsLeft }
-    if (visitsLeft !== null && visitsLeft <= 0) return { label: 'Visits Used Up', color: 'red', daysLeft, visitsLeft: 0 }
-    if (daysLeft <= 2 || (visitsLeft !== null && visitsLeft <= 2)) return { label: 'Expiring Soon', color: 'yellow', daysLeft, visitsLeft }
-    return { label: 'Active', color: 'green', daysLeft, visitsLeft }
+    if (!sub.isActive) return { label: t('dash.inactive'), color: 'red', daysLeft, visitsLeft }
+    if (daysLeft <= 0) return { label: t('dash.expired'), color: 'red', daysLeft: 0, visitsLeft }
+    if (visitsLeft !== null && visitsLeft <= 0) return { label: t('dash.visitsUsedUp'), color: 'red', daysLeft, visitsLeft: 0 }
+    if (daysLeft <= 2 || (visitsLeft !== null && visitsLeft <= 2)) return { label: t('dash.expiringSoon'), color: 'yellow', daysLeft, visitsLeft }
+    return { label: t('dash.active'), color: 'green', daysLeft, visitsLeft }
   }
 
   const subStatus = getSubStatus(subInfo)
@@ -180,12 +188,28 @@ export default function DashboardPage() {
           </motion.svg>
         </div>
         <p className="text-white/30 text-xs font-mono max-w-sm leading-relaxed mt-2 text-center">
-          Gate Access Security and Desk Accountability Operations Panel
+          {t('dash.gateAccess')}
         </p>
       </motion.section>
 
       {/* Analytics Cards */}
       <DashboardStats checkInCount={logCount} />
+
+      {/* Announcement Banner */}
+      {announcement && (
+        <motion.div
+          className="w-full flex items-center gap-3 px-5 py-3.5 rounded-2xl"
+          style={{ background: 'rgba(245, 197, 24, 0.08)', border: '1px solid rgba(245, 197, 24, 0.15)' }}
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
+          <Megaphone size={18} className="text-[#F5C518] shrink-0" />
+          <p className="text-sm font-medium text-[#F5C518]/80 flex-1">{announcement}</p>
+          <button onClick={() => setAnnouncement('')} className="text-white/20 hover:text-white/40 p-1">
+            <X size={14} />
+          </button>
+        </motion.div>
+      )}
 
       {/* Expiry Notifications */}
       <ExpiryBanner />
@@ -210,7 +234,7 @@ export default function DashboardPage() {
           whileTap={{ scale: 0.97 }}
         >
           <UserPlus className="w-4 h-4 text-black shrink-0" />
-          <span>Add New Student</span>
+          <span>{t('dash.addStudent')}</span>
           <span className="bg-black/10 text-[10px] px-1 rounded border border-black/5 leading-none">F2</span>
         </motion.button>
       </motion.section>
@@ -255,7 +279,7 @@ export default function DashboardPage() {
               <div className="flex flex-wrap items-center gap-2">
                 {subLoading ? (
                   <span className="text-xs text-white/30 flex items-center gap-1">
-                    <Loader2 size={14} className="animate-spin" /> Loading...
+                    <Loader2 size={14} className="animate-spin" /> {t('common.loading')}
                   </span>
                 ) : (
                   <>
@@ -289,7 +313,7 @@ export default function DashboardPage() {
                         'bg-blue-500/10 text-blue-400'
                       }`}>
                         <Calendar size={12} />
-                        {subStatus.daysLeft} {subStatus.daysLeft === 1 ? 'day' : 'days'} left
+                        {subStatus.daysLeft} {subStatus.daysLeft === 1 ? t('dash.dayLeft') : t('dash.daysLeft')}
                       </span>
                     )}
 
@@ -301,7 +325,7 @@ export default function DashboardPage() {
                         'bg-emerald-500/10 text-emerald-400'
                       }`}>
                         <Clock size={12} />
-                        {subStatus.visitsLeft} {subStatus.visitsLeft === 1 ? 'visit' : 'visits'} left
+                        {subStatus.visitsLeft} {subStatus.visitsLeft === 1 ? t('dash.visitLeft') : t('dash.visitsLeft')}
                       </span>
                     )}
                   </>
@@ -325,12 +349,12 @@ export default function DashboardPage() {
                 ) : subStatus.color === 'red' ? (
                   <>
                     <XCircle size={16} />
-                    Expired
+                    {t('dash.expired')}
                   </>
                 ) : (
                   <>
                     <LogIn size={16} />
-                    Check In
+                    {t('dash.checkIn')}
                   </>
                 )}
               </button>
@@ -371,6 +395,9 @@ export default function DashboardPage() {
       >
         <TodayFeedTable refreshTrigger={refreshTrigger} onLogsFetched={(logs) => setLogCount(logs.length)} userRole={userRole} />
       </motion.section>
+
+      {/* Waitlist Panel — shows when capacity is full */}
+      <WaitlistPanel refreshTrigger={refreshTrigger} />
 
       <AddStudentModal onCreated={() => setRefreshTrigger((n) => n + 1)} />
 

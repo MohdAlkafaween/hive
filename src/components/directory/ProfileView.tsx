@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { RenewModal } from './RenewModal'
 import { ReceiptModal, type ReceiptData } from '@/components/dashboard/ReceiptModal'
+import { useI18n } from '@/lib/i18n'
 
 // QR code canvas component using the qrcode library
 function QrCanvas({ value, size = 192 }: { value: string; size?: number }) {
@@ -30,6 +31,14 @@ interface Student {
   rfidUuid?: string
   photoUrl?: string
   qrToken?: string
+  email?: string
+  university?: string
+  gender?: string
+  dateOfBirth?: string
+  emergencyContact?: string
+  emergencyPhone?: string
+  referralSource?: string
+  status?: string
   lifetimeCheckIns: number
   createdAt: string
   subscriptions: Subscription[]
@@ -40,6 +49,7 @@ interface Subscription {
   id: number; planType: string; startDate: string; expiryDate: string
   totalVisitsAllowed: number; visitsUsed: number; isActive: boolean; createdAt: string
   isFrozen?: boolean; frozenAt?: string; freezeDays?: number
+  createdByUser?: { name: string; email: string } | null
 }
 interface Log { id: number; checkInTime: string; checkOutTime?: string; date: string }
 interface Transaction { id: number; amountPaid: number; planType: string; gateway: string; discountAmount: number; createdAt: string }
@@ -52,6 +62,7 @@ interface ProfileViewProps {
 }
 
 export function ProfileView({ studentId, onBack }: ProfileViewProps) {
+  const { t } = useI18n()
   const [student, setStudent] = useState<Student | null>(null)
   const [loading, setLoading] = useState(true)
   const [renewOpen, setRenewOpen] = useState(false)
@@ -91,6 +102,11 @@ export function ProfileView({ studentId, onBack }: ProfileViewProps) {
   const [editName, setEditName] = useState('')
   const [editPhone, setEditPhone] = useState('')
   const [editMajor, setEditMajor] = useState('')
+  const [editEmail, setEditEmail] = useState('')
+  const [editUniversity, setEditUniversity] = useState('')
+  const [editGender, setEditGender] = useState('')
+  const [editEmergencyContact, setEditEmergencyContact] = useState('')
+  const [editEmergencyPhone, setEditEmergencyPhone] = useState('')
   const [savingProfile, setSavingProfile] = useState(false)
 
   const fetchStudent = useCallback(async () => {
@@ -265,6 +281,11 @@ export function ProfileView({ studentId, onBack }: ProfileViewProps) {
     setEditName(student.fullName)
     setEditPhone(student.phone)
     setEditMajor(student.major || '')
+    setEditEmail(student.email || '')
+    setEditUniversity(student.university || '')
+    setEditGender(student.gender || '')
+    setEditEmergencyContact(student.emergencyContact || '')
+    setEditEmergencyPhone(student.emergencyPhone || '')
     setEditingProfile(true)
   }
 
@@ -274,7 +295,11 @@ export function ProfileView({ studentId, onBack }: ProfileViewProps) {
       const res = await fetch(`/api/students/${studentId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fullName: editName, phone: editPhone, major: editMajor || null }),
+        body: JSON.stringify({
+          fullName: editName, phone: editPhone, major: editMajor || null,
+          email: editEmail || null, university: editUniversity || null, gender: editGender || null,
+          emergencyContact: editEmergencyContact || null, emergencyPhone: editEmergencyPhone || null,
+        }),
       })
       if (res.ok) {
         setEditingProfile(false)
@@ -288,10 +313,10 @@ export function ProfileView({ studentId, onBack }: ProfileViewProps) {
   if (loading) return (
     <div className="flex flex-col items-center justify-center h-full gap-4">
       <Loader2 size={32} className="animate-spin text-[#F5C518]" />
-      <p className="text-sm font-bold text-white/30 uppercase tracking-widest">Loading Profile...</p>
+      <p className="text-sm font-bold text-white/30 uppercase tracking-widest">{t('profile.loadingProfile')}</p>
     </div>
   )
-  if (!student) return <div className="p-8 text-white/30 text-center font-medium">Student not found.</div>
+  if (!student) return <div className="p-8 text-white/30 text-center font-medium">{t('profile.notFound')}</div>
 
   const activeSub = student.subscriptions.find((s) => s.isActive && new Date(s.expiryDate) > new Date())
   const daysLeft = activeSub
@@ -314,11 +339,11 @@ export function ProfileView({ studentId, onBack }: ProfileViewProps) {
             )}
             {activeSub ? (
               <span className="px-3 py-1 bg-green-500/10 text-green-400 border border-green-500/20 rounded-md text-[11px] font-bold uppercase tracking-widest flex items-center gap-1.5">
-                <CheckCircle size={12} className="text-green-400" /> Active
+                <CheckCircle size={12} className="text-green-400" /> {t('profile.active')}
               </span>
             ) : (
               <span className="px-3 py-1 bg-red-500/10 text-red-400 border border-red-500/20 rounded-md text-[11px] font-bold uppercase tracking-widest flex items-center gap-1.5">
-                <XCircle size={12} className="text-red-400" /> Expired
+                <XCircle size={12} className="text-red-400" /> {t('profile.expired')}
               </span>
             )}
           </div>
@@ -328,22 +353,22 @@ export function ProfileView({ studentId, onBack }: ProfileViewProps) {
             <>
               <button onClick={() => setEditingProfile(false)}
                 className="flex items-center gap-2 px-4 py-2.5 bg-white/5 border border-white/10 text-white/50 rounded-xl text-sm font-bold hover:bg-white/10 transition-all">
-                <X size={16} /> Cancel
+                <X size={16} /> {t('profile.cancel')}
               </button>
               <button onClick={handleSaveProfile} disabled={savingProfile}
                 className="flex items-center gap-2 px-4 py-2.5 bg-[#F5C518] text-black rounded-xl text-sm font-bold hover:bg-[#D5A711] transition-all disabled:opacity-40">
-                {savingProfile ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} Save
+                {savingProfile ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} {t('profile.save')}
               </button>
             </>
           ) : (
             <>
               <button onClick={handleStartEdit}
                 className="flex items-center gap-2 px-4 py-2.5 bg-white/5 border border-white/10 text-white/50 rounded-xl text-sm font-bold hover:bg-white/10 hover:text-white transition-all">
-                <Edit3 size={16} /> Edit
+                <Edit3 size={16} /> {t('profile.edit')}
               </button>
               <button onClick={() => { setDeleteOpen(true); setDeleteError('') }}
                 className="flex items-center gap-2 px-4 py-2.5 bg-red-500/10 border border-red-500/20 text-red-400 rounded-xl text-sm font-bold hover:bg-red-500/20 hover:border-red-500/30 transition-all">
-                <Trash2 size={16} /> Delete
+                <Trash2 size={16} /> {t('profile.delete')}
               </button>
             </>
           )}
@@ -356,7 +381,7 @@ export function ProfileView({ studentId, onBack }: ProfileViewProps) {
           <div className="absolute top-0 right-0 w-32 h-32 bg-yellow-500/100/5 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none" />
           <h2 className="text-[11px] font-bold text-white/40 uppercase tracking-widest mb-5 flex items-center gap-2">
             <User size={14} className="text-[#F5C518]" />
-            Personal Info
+            {t('profile.personalInfo')}
           </h2>
           <div className="space-y-5 relative z-10">
             {/* Student Photo */}
@@ -387,24 +412,57 @@ export function ProfileView({ studentId, onBack }: ProfileViewProps) {
             {editingProfile ? (
               <div className="space-y-3">
                 <div>
-                  <label className="text-[10px] font-bold text-white/30 uppercase tracking-wider">Phone</label>
+                  <label className="text-[10px] font-bold text-white/30 uppercase tracking-wider">{t('common.phone')}</label>
                   <input value={editPhone} onChange={(e) => setEditPhone(e.target.value)}
                     className="w-full mt-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-[#F5C518] outline-none" />
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold text-white/30 uppercase tracking-wider">Major</label>
-                  <input value={editMajor} onChange={(e) => setEditMajor(e.target.value)} placeholder="Optional"
+                  <label className="text-[10px] font-bold text-white/30 uppercase tracking-wider">{t('common.major')}</label>
+                  <input value={editMajor} onChange={(e) => setEditMajor(e.target.value)} placeholder={t('profile.optional')}
+                    className="w-full mt-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-[#F5C518] outline-none placeholder:text-white/20" />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-white/30 uppercase tracking-wider">{t('addStudent.email')}</label>
+                  <input value={editEmail} onChange={(e) => setEditEmail(e.target.value)} type="email" placeholder={t('profile.optional')}
+                    className="w-full mt-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-[#F5C518] outline-none placeholder:text-white/20" />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-white/30 uppercase tracking-wider">{t('addStudent.university')}</label>
+                  <input value={editUniversity} onChange={(e) => setEditUniversity(e.target.value)} placeholder={t('profile.optional')}
+                    className="w-full mt-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-[#F5C518] outline-none placeholder:text-white/20" />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-white/30 uppercase tracking-wider">{t('addStudent.gender')}</label>
+                  <select value={editGender} onChange={(e) => setEditGender(e.target.value)}
+                    className="w-full mt-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-[#F5C518] outline-none">
+                    <option value="">{t('addStudent.selectGender')}</option>
+                    <option value="male">{t('addStudent.male')}</option>
+                    <option value="female">{t('addStudent.female')}</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-white/30 uppercase tracking-wider">{t('addStudent.emergencyContact')}</label>
+                  <input value={editEmergencyContact} onChange={(e) => setEditEmergencyContact(e.target.value)} placeholder={t('profile.optional')}
+                    className="w-full mt-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-[#F5C518] outline-none placeholder:text-white/20" />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-white/30 uppercase tracking-wider">{t('addStudent.emergencyPhone')}</label>
+                  <input value={editEmergencyPhone} onChange={(e) => setEditEmergencyPhone(e.target.value)} placeholder={t('profile.optional')} type="tel"
                     className="w-full mt-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-[#F5C518] outline-none placeholder:text-white/20" />
                 </div>
               </div>
             ) : (
               <>
-                <InfoRow icon={<Phone size={14} />} label="Phone" value={student.phone} />
-                {student.major && <InfoRow icon={<BookOpen size={14} />} label="Major" value={student.major} />}
+                <InfoRow icon={<Phone size={14} />} label={t('common.phone')} value={student.phone} />
+                {student.major && <InfoRow icon={<BookOpen size={14} />} label={t('common.major')} value={student.major} />}
+                {student.email && <InfoRow icon={<Activity size={14} />} label={t('addStudent.email')} value={student.email} />}
+                {student.university && <InfoRow icon={<BookOpen size={14} />} label={t('addStudent.university')} value={student.university} />}
+                {student.gender && <InfoRow icon={<User size={14} />} label={t('addStudent.gender')} value={student.gender === 'male' ? t('addStudent.male') : t('addStudent.female')} />}
+                {student.emergencyContact && <InfoRow icon={<AlertTriangle size={14} />} label={t('addStudent.emergencyContact')} value={`${student.emergencyContact}${student.emergencyPhone ? ` (${student.emergencyPhone})` : ''}`} />}
               </>
             )}
-            <InfoRow icon={<Activity size={14} />} label="Lifetime Check-Ins" value={student.lifetimeCheckIns.toString()} accent />
-            <InfoRow icon={<CreditCard size={14} />} label="RFID" value={student.rfidUuid ?? 'Not Linked'} />
+            <InfoRow icon={<Activity size={14} />} label={t('profile.lifetimeCheckIns')} value={student.lifetimeCheckIns.toString()} accent />
+            <InfoRow icon={<CreditCard size={14} />} label={t('profile.rfid')} value={student.rfidUuid ?? t('profile.notLinked')} />
 
             <div className="pt-4 border-t border-white/8">
               <Button
@@ -414,7 +472,7 @@ export function ProfileView({ studentId, onBack }: ProfileViewProps) {
                 onClick={() => { setLinkingRfid((v) => !v); setRfidStatus('') }}
               >
                 {linkingRfid ? <Loader2 size={16} className="animate-spin mr-2" /> : <CreditCard size={16} className="mr-2" />}
-                {linkingRfid ? 'Waiting for card swipe...' : student.rfidUuid ? 'Issue Replacement Card' : 'Link New Card'}
+                {linkingRfid ? t('profile.waitingForSwipe') : student.rfidUuid ? t('profile.issueReplacement') : t('profile.linkNewCard')}
               </Button>
               {rfidStatus && <p className="text-xs font-bold text-[#F5C518] text-center mt-3 animate-pulse">{rfidStatus}</p>}
             </div>
@@ -426,21 +484,21 @@ export function ProfileView({ studentId, onBack }: ProfileViewProps) {
           {activeSub && <div className="absolute top-0 right-0 w-32 h-32 bg-green-500/5 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none" />}
           <h2 className="text-[11px] font-bold text-white/40 uppercase tracking-widest mb-5 flex items-center gap-2">
             <Calendar size={14} className="text-[#F5C518]" />
-            Current Subscription
+            {t('profile.currentSubscription')}
           </h2>
           
           {activeSub ? (
             <div className="space-y-5 relative z-10">
               <div className="flex items-center justify-between">
                 <div className="inline-block px-3 py-1 bg-yellow-500/10 text-[#F5C518] border border-yellow-500/20 rounded-md text-[11px] font-bold uppercase tracking-widest">
-                  {activeSub.planType} Pass
+                  {activeSub.planType} {t('profile.pass')}
                 </div>
                 {activeSub.planType !== 'Daily' && !editingEntries && (
                   <button
                     onClick={() => { setEditingEntries(true); setEntryAdjust(0) }}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-white/40 hover:text-[#F5C518] hover:border-[#F5C518]/30 text-xs font-medium transition-all"
                   >
-                    <Edit3 size={12} /> Edit Entries
+                    <Edit3 size={12} /> {t('profile.editEntries')}
                   </button>
                 )}
               </div>
@@ -448,7 +506,7 @@ export function ProfileView({ studentId, onBack }: ProfileViewProps) {
               {/* Edit entries panel */}
               {editingEntries && activeSub.planType !== 'Daily' && (
                 <div className="p-4 rounded-xl" style={{ background: 'rgba(245, 197, 24, 0.05)', border: '1px solid rgba(245, 197, 24, 0.15)' }}>
-                  <p className="text-[10px] font-bold text-white/30 uppercase tracking-wider mb-3">Adjust Total Entries</p>
+                  <p className="text-[10px] font-bold text-white/30 uppercase tracking-wider mb-3">{t('profile.adjustEntries')}</p>
                   <div className="flex items-center gap-3">
                     <button onClick={() => setEntryAdjust(v => v - 1)}
                       className="w-9 h-9 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-white/50 hover:text-red-400 hover:border-red-500/30 transition-all">
@@ -456,7 +514,7 @@ export function ProfileView({ studentId, onBack }: ProfileViewProps) {
                     </button>
                     <div className="flex-1 text-center">
                       <span className="text-2xl font-black text-white">{activeSub.totalVisitsAllowed + entryAdjust}</span>
-                      <span className="text-xs text-white/25 ml-2">total entries</span>
+                      <span className="text-xs text-white/25 ml-2">{t('profile.totalEntries')}</span>
                       {entryAdjust !== 0 && (
                         <span className={`ml-2 text-xs font-bold ${entryAdjust > 0 ? 'text-green-400' : 'text-red-400'}`}>
                           ({entryAdjust > 0 ? '+' : ''}{entryAdjust})
@@ -470,31 +528,31 @@ export function ProfileView({ studentId, onBack }: ProfileViewProps) {
                   </div>
                   <div className="flex gap-2 mt-3">
                     <button onClick={() => { setEditingEntries(false); setEntryAdjust(0) }}
-                      className="flex-1 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white/40 text-xs font-medium hover:bg-white/10 transition-all">Cancel</button>
+                      className="flex-1 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white/40 text-xs font-medium hover:bg-white/10 transition-all">{t('common.cancel')}</button>
                     <button onClick={() => handleSaveEntries(activeSub)} disabled={entryAdjust === 0 || savingEntries}
                       className="flex-1 px-3 py-2 rounded-lg bg-[#F5C518] hover:bg-[#D5A711] text-black text-xs font-bold transition-all disabled:opacity-40 flex items-center justify-center gap-1.5">
                       {savingEntries ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
-                      Save
+                      {t('common.save')}
                     </button>
                   </div>
                 </div>
               )}
 
               <div className="grid grid-cols-2 gap-4">
-                <StatCard label="Days Left" value={daysLeft.toString()} sub="calendar days" />
+                <StatCard label={t('profile.daysLeftLabel')} value={daysLeft.toString()} sub={t('profile.calendarDays')} />
                 <StatCard
-                  label="Visits"
+                  label={t('profile.visitsLabel')}
                   value={activeSub.planType === 'Daily' ? '∞' : `${activeSub.totalVisitsAllowed - activeSub.visitsUsed}`}
-                  sub={activeSub.planType === 'Daily' ? 'unlimited today' : `of ${activeSub.totalVisitsAllowed} remaining`}
+                  sub={activeSub.planType === 'Daily' ? t('profile.unlimitedToday') : `${activeSub.totalVisitsAllowed - activeSub.visitsUsed} / ${activeSub.totalVisitsAllowed} ${t('profile.ofRemaining')}`}
                 />
-                <StatCard label="Expires" value={new Date(activeSub.expiryDate).toLocaleDateString('en-JO', { month: 'short', day: 'numeric', year: 'numeric' })} sub="" />
-                <StatCard label="Started"  value={new Date(activeSub.startDate).toLocaleDateString('en-JO', { month: 'short', day: 'numeric', year: 'numeric' })} sub="" />
+                <StatCard label={t('profile.expiresLabel')} value={new Date(activeSub.expiryDate).toLocaleDateString('en-JO', { month: 'short', day: 'numeric', year: 'numeric' })} sub="" />
+                <StatCard label={t('profile.startedLabel')}  value={new Date(activeSub.startDate).toLocaleDateString('en-JO', { month: 'short', day: 'numeric', year: 'numeric' })} sub="" />
               </div>
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center h-[180px] bg-white/3 rounded-xl border border-dashed border-white/8">
               <XCircle size={32} className="text-white/25 mb-2" />
-              <p className="text-sm font-medium text-white/30">No active subscription.</p>
+              <p className="text-sm font-medium text-white/30">{t('profile.noActiveSub')}</p>
             </div>
           )}
           
@@ -506,17 +564,17 @@ export function ProfileView({ studentId, onBack }: ProfileViewProps) {
               className="w-full mt-3 py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 bg-blue-500/10 border border-blue-500/20 text-blue-400 hover:bg-blue-500/20 transition-all disabled:opacity-40"
             >
               {freezing ? <Loader2 size={14} className="animate-spin" /> : <Snowflake size={14} />}
-              Freeze Subscription
+              {t('profile.freezeSub')}
             </button>
           )}
           {activeSub?.isFrozen && (
             <div className="mt-3 space-y-2">
               <div className="px-3 py-2 rounded-lg bg-blue-500/10 border border-blue-500/20 text-center">
                 <p className="text-xs font-bold text-blue-400 flex items-center justify-center gap-1.5">
-                  <Snowflake size={12} /> Subscription Frozen
+                  <Snowflake size={12} /> {t('profile.subFrozen')}
                 </p>
                 <p className="text-[10px] text-blue-300/60 mt-0.5">
-                  Frozen {activeSub.freezeDays || 0} days total
+                  {t('profile.frozenDays').replace('{n}', String(activeSub.freezeDays || 0))}
                 </p>
               </div>
               <button
@@ -525,14 +583,14 @@ export function ProfileView({ studentId, onBack }: ProfileViewProps) {
                 className="w-full py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 bg-green-500/10 border border-green-500/20 text-green-400 hover:bg-green-500/20 transition-all disabled:opacity-40"
               >
                 {freezing ? <Loader2 size={14} className="animate-spin" /> : <Snowflake size={14} />}
-                Unfreeze Subscription
+                {t('profile.unfreezeSub')}
               </button>
             </div>
           )}
 
           <Button onClick={() => setRenewOpen(true)} className="w-full mt-5 py-6 text-base font-bold shadow-[0_4px_20px_rgba(245,197,24,0.15)] bg-[#F5C518] hover:bg-[#D4A017] text-white relative z-10">
             <RefreshCw size={18} className="mr-2" />
-            Renew Subscription
+            {t('profile.renewSub')}
           </Button>
         </div>
 
@@ -540,7 +598,7 @@ export function ProfileView({ studentId, onBack }: ProfileViewProps) {
         <div className="border border-white/8 rounded-2xl p-6 flex flex-col" style={{ background: 'rgba(255,255,255,0.04)' }}>
           <h2 className="text-[11px] font-bold text-white/40 uppercase tracking-widest mb-4 flex items-center gap-2">
             <Hash size={14} className="text-[#F5C518]" />
-            Recent Check-Ins
+            {t('profile.recentCheckIns')}
           </h2>
 
           {/* Visit frequency — last 4 weeks */}
@@ -577,7 +635,7 @@ export function ProfileView({ studentId, onBack }: ProfileViewProps) {
             return (
               <div className="flex items-center gap-2 mb-3 px-1">
                 <Activity size={12} className="text-white/20" />
-                <span className="text-[10px] text-white/25 font-bold">Avg session: <span className="text-white/50">{avgH}h {avgM}m</span></span>
+                <span className="text-[10px] text-white/25 font-bold">{t('profile.avgSessionLabel')} <span className="text-white/50">{avgH}h {avgM}m</span></span>
               </div>
             )
           })()}
@@ -591,7 +649,7 @@ export function ProfileView({ studentId, onBack }: ProfileViewProps) {
             ))}
             {student.logs.length === 0 && (
               <div className="flex flex-col items-center justify-center h-full text-white/25">
-                <p className="text-sm font-medium">No check-ins recorded.</p>
+                <p className="text-sm font-medium">{t('profile.noCheckIns')}</p>
               </div>
             )}
           </div>
@@ -603,7 +661,7 @@ export function ProfileView({ studentId, onBack }: ProfileViewProps) {
               className="mt-4 w-full py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 bg-purple-500/10 border border-purple-500/20 text-purple-400 hover:bg-purple-500/20 transition-all"
             >
               <QrCode size={16} />
-              Show QR Code
+              {t('profile.showQr')}
             </button>
           )}
         </div>
@@ -613,14 +671,14 @@ export function ProfileView({ studentId, onBack }: ProfileViewProps) {
       <div className="border border-white/8 rounded-2xl p-6" style={{ background: 'rgba(255,255,255,0.04)' }}>
         <h2 className="text-[11px] font-bold text-white/40 uppercase tracking-widest mb-5 flex items-center gap-2">
           <StickyNote size={14} className="text-[#F5C518]" />
-          Notes
+          {t('profile.notes')}
         </h2>
         <div className="flex gap-2 mb-4">
           <input
             value={newNote}
             onChange={(e) => setNewNote(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAddNote() } }}
-            placeholder="Add a note about this student..."
+            placeholder={t('profile.addNote')}
             className="flex-1 px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white text-sm placeholder:text-white/20 focus:border-[#F5C518]/40 focus:outline-none transition-colors"
             maxLength={1000}
           />
@@ -650,7 +708,7 @@ export function ProfileView({ studentId, onBack }: ProfileViewProps) {
             </div>
           ))}
           {notes.length === 0 && (
-            <p className="text-sm text-white/20 text-center py-4">No notes yet.</p>
+            <p className="text-sm text-white/20 text-center py-4">{t('profile.noNotes')}</p>
           )}
         </div>
       </div>
@@ -661,7 +719,7 @@ export function ProfileView({ studentId, onBack }: ProfileViewProps) {
           <div className="flex items-center justify-between mb-5">
             <h2 className="text-[11px] font-bold text-white/40 uppercase tracking-widest flex items-center gap-2">
               <Coffee size={14} className="text-[#F5C518]" />
-              Barista Purchases
+              {t('profile.baristaPurchases')}
             </h2>
             <span className="text-[10px] font-bold text-white/25 px-2 py-1 rounded-md bg-white/5 border border-white/8">
               {baristaOrders.length} orders · {baristaOrders.reduce((s, o) => s + o.totalPrice, 0).toFixed(2)} JD total
@@ -692,14 +750,14 @@ export function ProfileView({ studentId, onBack }: ProfileViewProps) {
       <div className="border border-white/8 rounded-2xl p-6 mt-2" style={{ background: 'rgba(255,255,255,0.04)' }}>
         <h2 className="text-[11px] font-bold text-white/40 uppercase tracking-widest mb-6 flex items-center gap-2">
           <Calendar size={14} className="text-[#F5C518]" />
-          Subscription History
+          {t('profile.subscriptionHistory')}
         </h2>
         <div className="overflow-x-auto rounded-xl border border-white/8">
           <table className="w-full text-sm text-left">
             <thead className="bg-white/3 border-b border-white/8">
               <tr>
-                {['Plan', 'Start Date', 'Expiry Date', 'Visits Used', 'Status'].map((h) => (
-                  <th key={h} className="px-5 py-4 text-[11px] font-bold text-white/40 uppercase tracking-wider">{h}</th>
+                {[t('profile.plan'), t('profile.startDate'), t('profile.expiryDate'), t('profile.visitsUsed'), t('sub.soldBy'), t('profile.status')].map((h, i) => (
+                  <th key={i} className="px-5 py-4 text-[11px] font-bold text-white/40 uppercase tracking-wider">{h}</th>
                 ))}
               </tr>
             </thead>
@@ -712,11 +770,12 @@ export function ProfileView({ studentId, onBack }: ProfileViewProps) {
                     <td className="px-5 py-4 font-medium text-white/30">{new Date(s.startDate).toLocaleDateString('en-JO', { month: 'short', day: 'numeric', year: 'numeric' })}</td>
                     <td className="px-5 py-4 font-medium text-white/30">{new Date(s.expiryDate).toLocaleDateString('en-JO', { month: 'short', day: 'numeric', year: 'numeric' })}</td>
                     <td className="px-5 py-4 font-medium text-white/30">{s.planType === 'Daily' ? '—' : <span className="font-bold text-white/80 bg-white/8 px-2 py-0.5 rounded">{s.visitsUsed} / {s.totalVisitsAllowed}</span>}</td>
+                    <td className="px-5 py-4 text-xs text-white/30 font-medium">{s.createdByUser?.name || s.createdByUser?.email?.split('@')[0] || '—'}</td>
                     <td className="px-5 py-4">
                       {isActive ? (
-                        <span className="px-2.5 py-1 bg-green-500/10 text-green-400 border border-green-500/20 rounded-md text-[10px] font-bold uppercase tracking-widest">Active</span>
+                        <span className="px-2.5 py-1 bg-green-500/10 text-green-400 border border-green-500/20 rounded-md text-[10px] font-bold uppercase tracking-widest">{t('profile.active')}</span>
                       ) : (
-                        <span className="px-2.5 py-1 bg-red-500/10 text-red-400 border border-red-500/20 rounded-md text-[10px] font-bold uppercase tracking-widest">Expired</span>
+                        <span className="px-2.5 py-1 bg-red-500/10 text-red-400 border border-red-500/20 rounded-md text-[10px] font-bold uppercase tracking-widest">{t('profile.expired')}</span>
                       )}
                     </td>
                   </tr>
@@ -724,7 +783,7 @@ export function ProfileView({ studentId, onBack }: ProfileViewProps) {
               })}
               {student.subscriptions.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-5 py-8 text-center text-white/30 font-medium">No subscription history found.</td>
+                  <td colSpan={6} className="px-5 py-8 text-center text-white/30 font-medium">{t('profile.noSubHistory')}</td>
                 </tr>
               )}
             </tbody>
@@ -750,16 +809,16 @@ export function ProfileView({ studentId, onBack }: ProfileViewProps) {
       />
 
       {/* Delete Confirmation Modal */}
-      <Modal open={deleteOpen} onClose={() => setDeleteOpen(false)} title="Delete Student" maxWidth="max-w-md">
+      <Modal open={deleteOpen} onClose={() => setDeleteOpen(false)} title={t('profile.deleteStudent')} maxWidth="max-w-md">
         <div className="space-y-5">
           <div className="flex items-start gap-4 bg-red-50 border border-red-200 rounded-xl p-4">
             <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center shrink-0">
               <AlertTriangle size={20} className="text-red-500" />
             </div>
             <div>
-              <p className="text-sm font-bold text-red-700">This action cannot be undone.</p>
+              <p className="text-sm font-bold text-red-700">{t('profile.cannotUndo')}</p>
               <p className="text-sm text-red-600 mt-1">
-                Deleting <span className="font-bold">{student.fullName}</span> will permanently remove their profile. Check-in logs, transactions, and subscription records will be preserved for audit purposes.
+                <span className="font-bold">{student.fullName}</span> — {t('profile.deleteDesc')}
               </p>
             </div>
           </div>
@@ -774,7 +833,7 @@ export function ProfileView({ studentId, onBack }: ProfileViewProps) {
               onClick={() => setDeleteOpen(false)}
               className="flex-1 py-5 bg-[#2A2A2A] border-[#3A3A3A] text-white hover:bg-[#3A3A3A]"
             >
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button
               onClick={handleDelete}
@@ -782,14 +841,14 @@ export function ProfileView({ studentId, onBack }: ProfileViewProps) {
               className="flex-[2] py-5 text-base font-bold bg-red-500 hover:bg-red-600 text-white shadow-lg"
             >
               {deleting ? <Loader2 size={18} className="animate-spin mr-2" /> : <Trash2 size={18} className="mr-2" />}
-              {deleting ? 'Deleting...' : 'Delete Permanently'}
+              {deleting ? t('profile.deleting') : t('profile.deletePermanently')}
             </Button>
           </div>
         </div>
       </Modal>
 
       {/* QR Code Modal */}
-      <Modal open={qrOpen} onClose={() => setQrOpen(false)} title="QR Code" maxWidth="max-w-sm">
+      <Modal open={qrOpen} onClose={() => setQrOpen(false)} title={t('profile.qrCodeTitle')} maxWidth="max-w-sm">
         <div className="flex flex-col items-center gap-4 py-4">
           <div className="p-4 bg-white rounded-2xl">
             <QrCanvas value={student?.qrToken || ''} size={192} />
@@ -799,7 +858,7 @@ export function ProfileView({ studentId, onBack }: ProfileViewProps) {
             <p className="text-[10px] text-white/30 mt-1 font-mono">{student?.qrToken}</p>
           </div>
           <p className="text-[11px] text-white/30 text-center">
-            Students can scan this QR code at the kiosk to check in without an RFID card.
+            {t('profile.qrDesc')}
           </p>
         </div>
       </Modal>

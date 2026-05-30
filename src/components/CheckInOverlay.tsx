@@ -3,10 +3,12 @@ import { useEffect, useRef, useState } from 'react'
 import { CheckCircle, XCircle, AlertTriangle, User, Calendar, Hash } from 'lucide-react'
 import { useHiveStore, CheckInResult } from '@/lib/store'
 import { useAudio } from '@/hooks/useAudio'
+import { useI18n } from '@/lib/i18n'
 
 const DISMISS_AFTER = 4000
 
 export function CheckInOverlay() {
+  const { t } = useI18n()
   const { overlay, setOverlay } = useHiveStore()
   const { playSuccess, playError } = useAudio()
   const [progress, setProgress] = useState(100)
@@ -78,7 +80,7 @@ export function CheckInOverlay() {
         <Icon size={96} color={accent} strokeWidth={1.5} className="drop-shadow-lg" />
 
         <div className="text-center space-y-2">
-          <p className="text-4xl font-black text-white tracking-tight">{overlay.student?.fullName ?? 'Unknown'}</p>
+          <p className="text-4xl font-black text-white tracking-tight">{overlay.student?.fullName ?? t('checkin.unknown')}</p>
           {overlay.student?.phone && (
             <p className="text-lg font-bold" style={{ color: accent }}>{overlay.student.phone}</p>
           )}
@@ -89,28 +91,28 @@ export function CheckInOverlay() {
             <div className="flex flex-col items-center justify-center w-full rounded-xl py-6"
               style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}
             >
-              <span className="text-sm font-bold text-white/40 uppercase tracking-widest mb-1">Visits Remaining</span>
+              <span className="text-sm font-bold text-white/40 uppercase tracking-widest mb-1">{t('checkin.visitsRemaining')}</span>
               <span className="text-[5rem] leading-none font-black tracking-tighter" style={{ color: accent }}>
                 {overlay.remainingVisits === null ? '∞' : overlay.remainingVisits}
               </span>
             </div>
 
             <div className="grid grid-cols-2 gap-4 w-full text-sm">
-              <Stat icon={<Calendar size={16} />} label="Plan Type" value={overlay.subscription?.planType ?? '—'} accent={accent} />
-              <Stat icon={<User size={16} />} label="Status" value={expiringSoon ? 'Expiring Soon' : 'Active'} accent={accent} />
+              <Stat icon={<Calendar size={16} />} label={t('checkin.planType')} value={overlay.subscription?.planType ?? '—'} accent={accent} />
+              <Stat icon={<User size={16} />} label={t('checkin.status')} value={expiringSoon ? t('checkin.expiringSoon') : t('checkin.active')} accent={accent} />
             </div>
 
             {overlay.status === 'ALREADY_IN' ? (
               <p className="text-sm font-bold text-[#F5C518] mt-2 px-4 py-2 rounded-lg"
                 style={{ background: 'rgba(245, 197, 24, 0.1)', border: '1px solid rgba(245, 197, 24, 0.2)' }}
               >
-                Already inside — no new entry created
+                {t('checkin.alreadyInside')}
               </p>
             ) : overlay.alreadyCheckedInToday && (
               <p className="text-xs font-bold text-[#F5C518] mt-2 px-3 py-1.5 rounded-md"
                 style={{ background: 'rgba(245, 197, 24, 0.1)', border: '1px solid rgba(245, 197, 24, 0.2)' }}
               >
-                Re-entry today — No visit deducted
+                {t('checkin.reentry')}
               </p>
             )}
           </div>
@@ -125,13 +127,13 @@ export function CheckInOverlay() {
                 className="inline-flex items-center justify-center bg-red-600 hover:bg-red-700 text-white font-bold px-6 py-3 rounded-lg text-sm mt-4 transition-colors shadow-lg"
                 onClick={(e) => e.stopPropagation()}
               >
-                Open profile to renew
+                {t('checkin.openProfile')}
               </a>
             )}
           </div>
         )}
 
-        <p className="text-[10px] font-bold tracking-widest uppercase text-white/25 mt-4">Click anywhere to dismiss</p>
+        <p className="text-[10px] font-bold tracking-widest uppercase text-white/25 mt-4">{t('checkin.dismiss')}</p>
       </div>
 
       {/* Progress bar */}

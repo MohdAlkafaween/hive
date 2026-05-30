@@ -1,4 +1,3 @@
-import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { requireAuth } from '@/lib/authGuard'
 import { isValidId } from '@/lib/sanitize'
@@ -15,7 +14,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
     const { id } = await params
     if (!isValidId(id)) {
-      return NextResponse.json({ error: 'Invalid user ID' }, { status: 400 })
+      return Response.json({ error: 'Invalid user ID' }, { status: 400 })
     }
 
     const user = await prisma.user.findUnique({
@@ -52,7 +51,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     })
 
     if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 })
+      return Response.json({ error: 'User not found' }, { status: 404 })
     }
 
     // Compute attendance: unique login days per month
@@ -81,7 +80,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
     const lastLogin = user.auditLogs.find((l) => l.event === 'LOGIN')?.createdAt || null
 
-    return NextResponse.json({
+    return Response.json({
       ...user,
       totalLogins: user._count.auditLogs,
       lastLogin,
@@ -89,7 +88,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     })
   } catch (e) {
     console.error('[GET /api/auth/users/[id]]', e)
-    return NextResponse.json({ error: 'Failed to load user' }, { status: 500 })
+    return Response.json({ error: 'Failed to load user' }, { status: 500 })
   }
 }
 
@@ -104,37 +103,63 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
     const { id } = await params
     if (!isValidId(id)) {
-      return NextResponse.json({ error: 'Invalid user ID' }, { status: 400 })
+      return Response.json({ error: 'Invalid user ID' }, { status: 400 })
     }
 
     const body = await req.json().catch(() => null)
-    if (!body) return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
+    if (!body) return Response.json({ error: 'Invalid request body' }, { status: 400 })
 
     const user = await prisma.user.findUnique({ where: { id: Number(id) } })
     if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 })
+      return Response.json({ error: 'User not found' }, { status: 404 })
     }
 
-    // Build update data — only allow name, phone, isActive, permissions
+    // Build update data — only allow name, phone, isActive, role, permissions
     const updateData: Record<string, unknown> = {}
     if (typeof body.name === 'string') updateData.name = body.name.trim().slice(0, 100)
     if (typeof body.phone === 'string') updateData.phone = body.phone.trim().slice(0, 20)
     if (typeof body.isActive === 'boolean') {
       // Cannot deactivate yourself
       if (user.id === (session.userId as number) && !body.isActive) {
-        return NextResponse.json({ error: 'Cannot deactivate your own account' }, { status: 400 })
+        return Response.json({ error: 'Cannot deactivate your own account' }, { status: 400 })
       }
       updateData.isActive = body.isActive
     }
+
+    // Allow role changes (ADMIN only)
+    const validRoles = ['ADMIN', 'MANAGER', 'STAFF']
+    if (typeof body.role === 'string' && validRoles.includes(body.role) && body.role !== user.role) {
+      // Prevent admin from demoting themselves
+      if (user.id === (session.userId as number)) {
+        return Response.json({ error: 'Cannot change your own role' }, { status: 400 })
+      }
+      const oldRole = user.role
+      updateData.role = body.role
+
+      // Log the role change
+      const ip = getClientIp(req)
+      await prisma.staffAuditLog.create({
+        data: {
+          userId: session.userId as number,
+          email: session.email as string,
+          role: session.role as string,
+          event: 'ROLE_CHANGED',
+          ip,
+          details: `Role changed from ${oldRole} to ${body.role} for user ${user.email}`,
+        },
+      }).catch(() => {})
+    }
+
     // Allow updating permissions for MANAGER role
-    if (Array.isArray(body.permissions) && user.role === 'MANAGER') {
+    const targetRole = (updateData.role as string) || user.role
+    if (Array.isArray(body.permissions) && targetRole === 'MANAGER') {
       const validPages = ['/', '/directory', '/logs', '/stats', '/barista', '/admin']
       const filtered = body.permissions.filter((p: string) => validPages.includes(p))
       updateData.permissions = JSON.stringify(filtered)
     }
 
     if (Object.keys(updateData).length === 0) {
-      return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 })
+      return Response.json({ error: 'No valid fields to update' }, { status: 400 })
     }
 
     const updated = await prisma.user.update({
@@ -143,10 +168,10 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       select: { id: true, email: true, name: true, phone: true, role: true, isActive: true },
     })
 
-    return NextResponse.json(updated)
+    return Response.json(updated)
   } catch (e) {
     console.error('[PUT /api/auth/users/[id]]', e)
-    return NextResponse.json({ error: 'Failed to update user' }, { status: 500 })
+    return Response.json({ error: 'Failed to update user' }, { status: 500 })
   }
 }
 
@@ -161,24 +186,24 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
 
     const { id } = await params
     if (!isValidId(id)) {
-      return NextResponse.json({ error: 'Invalid user ID' }, { status: 400 })
+      return Response.json({ error: 'Invalid user ID' }, { status: 400 })
     }
 
     const userId = Number(id)
 
     // Cannot delete yourself
     if (userId === (session.userId as number)) {
-      return NextResponse.json({ error: 'Cannot delete your own account' }, { status: 400 })
+      return Response.json({ error: 'Cannot delete your own account' }, { status: 400 })
     }
 
     const user = await prisma.user.findUnique({ where: { id: userId } })
     if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 })
+      return Response.json({ error: 'User not found' }, { status: 404 })
     }
 
     // Cannot delete another ADMIN
     if (user.role === 'ADMIN') {
-      return NextResponse.json({ error: 'Cannot delete admin accounts' }, { status: 400 })
+      return Response.json({ error: 'Cannot delete admin accounts' }, { status: 400 })
     }
 
     // Log the deletion
@@ -197,9 +222,9 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     // Delete user — audit logs are preserved (onDelete: SetNull nullifies userId)
     await prisma.user.delete({ where: { id: userId } })
 
-    return NextResponse.json({ message: `Account ${user.email} deleted` })
+    return Response.json({ message: `Account ${user.email} deleted` })
   } catch (e) {
     console.error('[DELETE /api/auth/users/[id]]', e)
-    return NextResponse.json({ error: 'Failed to delete user' }, { status: 500 })
+    return Response.json({ error: 'Failed to delete user' }, { status: 500 })
   }
 }

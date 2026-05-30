@@ -1,4 +1,3 @@
-import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { requireAuth } from '@/lib/authGuard'
 
@@ -47,7 +46,7 @@ export async function GET(req: Request) {
       prisma.staffAuditLog.count({ where }),
     ])
 
-    return NextResponse.json({
+    return Response.json({
       logs,
       pagination: {
         page,
@@ -58,6 +57,6 @@ export async function GET(req: Request) {
     })
   } catch (e) {
     console.error('[GET /api/auth/audit-logs]', e)
-    return NextResponse.json({ error: 'Failed to load audit logs' }, { status: 500 })
+    return Response.json({ error: 'Failed to load audit logs' }, { status: 500 })
   }
 }

@@ -5,6 +5,7 @@ import { isValidId, sanitizeRfid } from '@/lib/sanitize'
 import { checkRateLimit, getClientIp } from '@/lib/rateLimit'
 import { getCapacityInfo } from '@/lib/capacity'
 import { autoExpireSubscriptions } from '@/lib/autoExpire'
+import { verifyAuth } from '@/lib/auth'
 
 // Check-in is public (kiosk mode) but rate-limited
 export async function POST(req: NextRequest) {
@@ -43,6 +44,15 @@ export async function POST(req: NextRequest) {
 
     if (!student) {
       return Response.json({ status: 'NOT_FOUND', reason: 'Student not found.' }, { status: 404 })
+    }
+
+    // Block SUSPENDED/BANNED students
+    if (student.status === 'SUSPENDED' || student.status === 'BANNED') {
+      return Response.json({
+        status: student.status,
+        reason: student.status === 'SUSPENDED' ? 'Account suspended. Please see the front desk.' : 'Access denied. Please see the front desk.',
+        student,
+      }, { status: 403 })
     }
 
     const sub = student.subscriptions[0] ?? null
@@ -95,30 +105,69 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // Check if they had a previous check-in today (checked out already) — don't deduct visit again
-    const anyLogToday = await prisma.log.findFirst({
-      where: { studentId: student.id, date: today },
-    })
-    const shouldDeductVisit = !anyLogToday
+    // Optionally detect staff session for processedBy attribution
+    const session = await verifyAuth().catch(() => null)
+    const staffUserId = session?.userId ? (session.userId as number) : null
 
-    const log = await prisma.log.create({
-      data: { studentId: student.id, studentName: student.fullName, date: today },
+    // Wrap log creation + visit deduction in a transaction to prevent race conditions
+    // from concurrent RFID scans creating duplicate check-ins
+    const result = await prisma.$transaction(async (tx) => {
+      // Re-check for existing log inside transaction for atomicity
+      const existingInTx = await tx.log.findFirst({
+        where: { studentId: student.id, date: today, checkOutTime: null },
+      })
+      if (existingInTx) return { duplicate: true, logId: existingInTx.id }
+
+      // Check if they had a previous check-in today (checked out already) — don't deduct visit again
+      const anyLogToday = await tx.log.findFirst({
+        where: { studentId: student.id, date: today },
+      })
+      const shouldDeductVisit = !anyLogToday
+
+      const method = rfidUuid ? 'RFID' : 'MANUAL'
+      const log = await tx.log.create({
+        data: { studentId: student.id, studentName: student.fullName, date: today, method, processedBy: staffUserId },
+      })
+
+      let txSub = sub
+      if (shouldDeductVisit && sub.planType !== 'Daily') {
+        txSub = await tx.subscription.update({
+          where: { id: sub.id },
+          data: { visitsUsed: { increment: 1 } },
+        })
+        if (txSub.visitsUsed >= txSub.totalVisitsAllowed) {
+          txSub = await tx.subscription.update({
+            where: { id: sub.id },
+            data: { isActive: false },
+          })
+        }
+      }
+
+      const txStudent = await tx.student.update({
+        where: { id: student.id },
+        data: { lifetimeCheckIns: { increment: 1 } },
+      })
+
+      return { duplicate: false, logId: log.id, updatedSub: txSub, updatedStudent: txStudent, shouldDeductVisit }
     })
 
-    let updatedSub = sub
-    if (shouldDeductVisit && sub.planType !== 'Daily') {
-      const newVisitsUsed = sub.visitsUsed + 1
-      const exhausted = newVisitsUsed >= sub.totalVisitsAllowed
-      updatedSub = await prisma.subscription.update({
-        where: { id: sub.id },
-        data: { visitsUsed: newVisitsUsed, ...(exhausted && { isActive: false }) },
+    // Handle duplicate detected inside transaction
+    if (result.duplicate) {
+      const remainingVisits =
+        sub.planType === 'Daily'
+          ? null
+          : sub.totalVisitsAllowed - sub.visitsUsed
+      return Response.json({
+        status: 'ALREADY_IN',
+        student,
+        subscription: sub,
+        remainingVisits,
+        logId: result.logId,
+        alreadyCheckedInToday: true,
       })
     }
 
-    const updatedStudent = await prisma.student.update({
-      where: { id: student.id },
-      data: { lifetimeCheckIns: { increment: 1 } },
-    })
+    const { updatedSub, updatedStudent } = result as { updatedSub: typeof sub; updatedStudent: typeof student; logId: number; shouldDeductVisit: boolean; duplicate: false }
 
     const remainingVisits =
       sub.planType === 'Daily'
@@ -130,8 +179,8 @@ export async function POST(req: NextRequest) {
       student: updatedStudent,
       subscription: updatedSub,
       remainingVisits,
-      logId: log.id,
-      alreadyCheckedInToday: !shouldDeductVisit,
+      logId: result.logId,
+      alreadyCheckedInToday: !(result as { shouldDeductVisit: boolean }).shouldDeductVisit,
     })
   } catch (e) {
     console.error('[POST /api/checkin]', e)

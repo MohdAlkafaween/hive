@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 
 interface DisplayData {
   enabled: boolean
@@ -10,30 +10,44 @@ interface DisplayData {
   timestamp: string
 }
 
+const BASE_INTERVAL = 10_000 // 10s
+const MAX_INTERVAL = 60_000  // 60s
+
 export default function PublicDisplayPage() {
   const [data, setData] = useState<DisplayData | null>(null)
   const [disabled, setDisabled] = useState(false)
   const [clock, setClock] = useState(new Date())
+  const [isReconnecting, setIsReconnecting] = useState(false)
+  const [lastSuccess, setLastSuccess] = useState(Date.now())
+  const intervalRef = useRef(BASE_INTERVAL)
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const fetchData = useCallback(async () => {
     try {
       const res = await fetch('/api/display')
       if (res.status === 403) {
         setDisabled(true)
+        intervalRef.current = BASE_INTERVAL
         return
       }
       const json = await res.json()
       setData(json)
       setDisabled(false)
+      setIsReconnecting(false)
+      setLastSuccess(Date.now())
+      intervalRef.current = BASE_INTERVAL // Reset to normal on success
     } catch {
-      // silent
+      // Exponential backoff on failure — show last known data
+      setIsReconnecting(true)
+      intervalRef.current = Math.min(intervalRef.current * 2, MAX_INTERVAL)
     }
+    // Schedule next fetch
+    timerRef.current = setTimeout(fetchData, intervalRef.current)
   }, [])
 
   useEffect(() => {
     fetchData()
-    const interval = setInterval(fetchData, 10000) // refresh every 10s
-    return () => clearInterval(interval)
+    return () => { if (timerRef.current) clearTimeout(timerRef.current) }
   }, [fetchData])
 
   useEffect(() => {
@@ -70,6 +84,14 @@ export default function PublicDisplayPage() {
 
   return (
     <div className="min-h-screen bg-[#0A0A0A] flex flex-col items-center justify-center p-8 overflow-hidden select-none" style={{ cursor: 'none' }}>
+      {/* Reconnecting overlay */}
+      {isReconnecting && data && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-4 py-2 rounded-full" style={{ background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)' }}>
+          <div className="w-2 h-2 rounded-full bg-red-400 animate-pulse" />
+          <span className="text-xs font-bold text-red-400/80">Reconnecting...</span>
+        </div>
+      )}
+
       {/* Top bar with clock */}
       <div className="absolute top-6 left-8 right-8 flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -77,6 +99,8 @@ export default function PublicDisplayPage() {
             <span className="text-black font-black text-lg">H</span>
           </div>
           <span className="text-white/60 font-bold text-lg tracking-wider">HIVE</span>
+          {/* Heartbeat indicator */}
+          <div className={`w-2 h-2 rounded-full ${isReconnecting ? 'bg-red-400' : 'bg-green-500'} animate-pulse`} title={isReconnecting ? 'Reconnecting...' : 'Live'} />
         </div>
         <div className="text-white/30 text-xl font-mono">
           {clock.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}
