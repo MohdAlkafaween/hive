@@ -25,7 +25,7 @@ echo "✓ Prisma client generated"
 
 # Push any schema changes to DB (safe — won't drop data)
 echo "🗄️  Syncing database schema..."
-npx prisma db push --skip-generate
+npx prisma db push
 echo "✓ Database synced"
 
 # Build the app
