@@ -1179,7 +1179,7 @@ export default function BaristaPage() {
         <motion.div className="fixed inset-0 z-50 flex items-center justify-center p-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowItemForm(false)} />
           <motion.div className="relative w-full max-w-md max-h-[90vh] overflow-y-auto rounded-2xl border border-white/10 p-6" style={{ background: 'linear-gradient(135deg, #1A1A1A 0%, #0F0F0F 100%)' }} initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}>
-            <button onClick={() => setShowItemForm(false)} className="absolute top-3 right-3 text-white/30 hover:text-white"><X size={18} /></button>
+            <button onClick={() => setShowItemForm(false)} className="absolute top-5 right-5 text-white/30 hover:text-white"><X size={18} /></button>
             <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
               {editingItem ? <><Edit3 size={18} className="text-[#F5C518]" /> {t('barista.editItem')}</> : <><Plus size={18} className="text-[#F5C518]" /> {t('barista.addItem')}</>}
             </h3>
@@ -1261,7 +1261,7 @@ export default function BaristaPage() {
         <motion.div className="fixed inset-0 z-50 flex items-center justify-center p-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowCategoryModal(false)} />
           <motion.div className="relative w-full max-w-sm rounded-2xl border border-white/10 p-6" style={{ background: 'linear-gradient(135deg, #1A1A1A 0%, #0F0F0F 100%)' }} initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}>
-            <button onClick={() => setShowCategoryModal(false)} className="absolute top-3 right-3 text-white/30 hover:text-white"><X size={18} /></button>
+            <button onClick={() => setShowCategoryModal(false)} className="absolute top-5 right-5 text-white/30 hover:text-white"><X size={18} /></button>
             <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
               <Tag size={18} className="text-[#F5C518]" /> {editingCat ? t('barista.editCategory') : t('barista.addCategory')}
             </h3>
@@ -1293,7 +1293,7 @@ export default function BaristaPage() {
         <motion.div className="fixed inset-0 z-50 flex items-center justify-center p-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setOptionsModal(null)} />
           <motion.div className="relative w-full max-w-sm max-h-[90vh] overflow-y-auto rounded-2xl border border-white/10 p-6" style={{ background: 'linear-gradient(135deg, #1A1A1A 0%, #0F0F0F 100%)' }} initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}>
-            <button onClick={() => setOptionsModal(null)} className="absolute top-3 right-3 text-white/30 hover:text-white"><X size={18} /></button>
+            <button onClick={() => setOptionsModal(null)} className="absolute top-5 right-5 text-white/30 hover:text-white"><X size={18} /></button>
 
             {/* Item info */}
             <div className="flex items-center gap-3 mb-4">
@@ -1359,7 +1359,7 @@ export default function BaristaPage() {
         <motion.div className="fixed inset-0 z-50 flex items-center justify-center p-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowCheckout(false)} />
           <motion.div className="relative w-full max-w-sm max-h-[90vh] overflow-y-auto rounded-2xl border border-white/10 p-6" style={{ background: 'linear-gradient(135deg, #1A1A1A 0%, #0F0F0F 100%)' }} initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}>
-            <button onClick={() => setShowCheckout(false)} className="absolute top-3 right-3 text-white/30 hover:text-white"><X size={18} /></button>
+            <button onClick={() => setShowCheckout(false)} className="absolute top-5 right-5 text-white/30 hover:text-white"><X size={18} /></button>
             <h3 className="text-lg font-bold text-white mb-4">{t('barista.checkout')}</h3>
 
             {/* Cart summary */}
@@ -1444,7 +1444,7 @@ export default function BaristaPage() {
         <motion.div className="fixed inset-0 z-50 flex items-center justify-center p-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setReceiptData(null)} />
           <motion.div className="relative w-full max-w-xs rounded-2xl border border-white/10 p-6" style={{ background: 'linear-gradient(135deg, #1A1A1A 0%, #0F0F0F 100%)' }} initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}>
-            <button onClick={() => setReceiptData(null)} className="absolute top-3 right-3 text-white/30 hover:text-white"><X size={18} /></button>
+            <button onClick={() => setReceiptData(null)} className="absolute top-5 right-5 text-white/30 hover:text-white"><X size={18} /></button>
 
             <div className="text-center mb-4">
               <Receipt size={32} className="text-[#F5C518] mx-auto mb-2" />
@@ -1495,7 +1495,7 @@ export default function BaristaPage() {
         <motion.div className="fixed inset-0 z-50 flex items-center justify-center p-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowCustomItem(false)} />
           <motion.div className="relative w-full max-w-xs rounded-2xl border border-white/10 p-6" style={{ background: 'linear-gradient(135deg, #1A1A1A 0%, #0F0F0F 100%)' }} initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}>
-            <button onClick={() => setShowCustomItem(false)} className="absolute top-3 right-3 text-white/30 hover:text-white"><X size={18} /></button>
+            <button onClick={() => setShowCustomItem(false)} className="absolute top-5 right-5 text-white/30 hover:text-white"><X size={18} /></button>
             <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
               <PenLine size={18} className="text-[#F5C518]" /> {t('barista.customItem')}
             </h3>
@@ -1529,7 +1529,7 @@ export default function BaristaPage() {
         <motion.div className="fixed inset-0 z-50 flex items-center justify-center p-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowOptionForm(false)} />
           <motion.div className="relative w-full max-w-xs rounded-2xl border border-white/10 p-6" style={{ background: 'linear-gradient(135deg, #1A1A1A 0%, #0F0F0F 100%)' }} initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}>
-            <button onClick={() => setShowOptionForm(false)} className="absolute top-3 right-3 text-white/30 hover:text-white"><X size={18} /></button>
+            <button onClick={() => setShowOptionForm(false)} className="absolute top-5 right-5 text-white/30 hover:text-white"><X size={18} /></button>
             <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
               <Sliders size={18} className="text-purple-400" /> {editingOption ? t('barista.editOption') : t('barista.addOption')}
             </h3>

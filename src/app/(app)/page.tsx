@@ -250,15 +250,6 @@ export default function DashboardPage() {
           transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
         >
           <div className="bg-[#1A1A1A] border-2 border-[#2C2C2C] rounded-2xl p-5 relative shadow-[0_8px_32px_rgba(0,0,0,0.3),0_0_60px_rgba(245,197,24,0.05)] hover:border-[#F5C518]/30 transition-all duration-300">
-            {/* Close button */}
-            <button
-              onClick={() => { setSelected(null); setSubInfo(null); setCheckInStatus('idle') }}
-              className="absolute top-3 right-3 p-1.5 rounded-lg text-white/30 hover:text-white hover:bg-white/10 transition-all"
-              title="Close (Esc)"
-            >
-              <X size={16} />
-            </button>
-
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
               {/* Student avatar + info */}
               <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -357,6 +348,15 @@ export default function DashboardPage() {
                     {t('dash.checkIn')}
                   </>
                 )}
+              </button>
+
+              {/* Close button */}
+              <button
+                onClick={() => { setSelected(null); setSubInfo(null); setCheckInStatus('idle') }}
+                className="flex-shrink-0 p-2 rounded-lg text-white/30 hover:text-white hover:bg-white/10 transition-all"
+                title="Close (Esc)"
+              >
+                <X size={18} />
               </button>
             </div>
 

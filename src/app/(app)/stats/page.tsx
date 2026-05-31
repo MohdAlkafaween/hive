@@ -618,7 +618,7 @@ export default function StatsPage() {
           <motion.div className="fixed inset-0 z-50 flex items-center justify-center p-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
             <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setVoidTx(null)} />
             <motion.div className="relative w-full max-w-md rounded-2xl border border-white/10 p-6" style={{ background: 'linear-gradient(135deg, #1A1A1A 0%, #0F0F0F 100%)' }} initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}>
-              <button onClick={() => setVoidTx(null)} className="absolute top-3 right-3 text-white/30 hover:text-white"><X size={18} /></button>
+              <button onClick={() => setVoidTx(null)} className="absolute top-5 right-5 text-white/30 hover:text-white"><X size={18} /></button>
               <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
                 <RotateCcw size={18} className="text-orange-400" /> {t('void.voidRefund')}
               </h3>

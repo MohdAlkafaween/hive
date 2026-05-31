@@ -45,11 +45,11 @@ export function Modal({ open, onClose, title, children, maxWidth = 'max-w-md' }:
               transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
             >
             {title && (
-              <div className="flex items-center justify-between px-5 py-4 border-b border-[#27272A]">
-                <h2 className="text-base font-semibold text-[#F4F4F5]">{title}</h2>
+              <div className="flex items-center justify-between px-6 py-5 border-b border-[#27272A]">
+                <h2 className="text-base font-semibold text-[#F4F4F5] pr-4">{title}</h2>
                 <motion.button
                   onClick={onClose}
-                  className="text-[#71717A] hover:text-[#F4F4F5] transition-colors cursor-pointer"
+                  className="text-[#71717A] hover:text-[#F4F4F5] transition-colors cursor-pointer flex-shrink-0"
                   whileHover={{ scale: 1.1, rotate: 90 }}
                   whileTap={{ scale: 0.9 }}
                 >
