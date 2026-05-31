@@ -2,8 +2,8 @@ import { copyFile, mkdir, readdir, stat, unlink } from 'fs/promises'
 import { join } from 'path'
 import { existsSync } from 'fs'
 
-const DB_PATH = join(process.cwd(), 'prisma', 'dev.db')
-const BACKUP_DIR = join(process.cwd(), 'prisma', 'backups')
+const DB_PATH = join(process.cwd(), 'dev.db')
+const BACKUP_DIR = join(process.cwd(), 'backups')
 
 export async function runScheduledBackup(trigger: 'SCHEDULED' | 'STARTUP' = 'SCHEDULED'): Promise<{ success: boolean; fileName?: string; fileSize?: number; error?: string }> {
   const { default: prisma } = await import('@/lib/prisma')

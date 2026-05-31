@@ -12,13 +12,13 @@ export async function GET() {
     const session = await requireAuth('ADMIN')
     if (session instanceof Response) return session
 
-    const dbPath = join(process.cwd(), 'prisma', 'dev.db')
+    const dbPath = join(process.cwd(), 'dev.db')
     if (!existsSync(dbPath)) {
       return Response.json({ error: 'Database file not found' }, { status: 404 })
     }
 
     // Copy to a temp backup file first to avoid locking issues
-    const backupDir = join(process.cwd(), 'prisma', 'backups')
+    const backupDir = join(process.cwd(), 'backups')
     await mkdir(backupDir, { recursive: true })
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
     const backupPath = join(backupDir, `hive-backup-${timestamp}.db`)
@@ -62,10 +62,10 @@ export async function POST(req: NextRequest) {
       return Response.json({ error: 'File too large (max 100MB)' }, { status: 400 })
     }
 
-    const dbPath = join(process.cwd(), 'prisma', 'dev.db')
+    const dbPath = join(process.cwd(), 'dev.db')
 
     // Create safety backup of current DB
-    const backupDir = join(process.cwd(), 'prisma', 'backups')
+    const backupDir = join(process.cwd(), 'backups')
     await mkdir(backupDir, { recursive: true })
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
     if (existsSync(dbPath)) {
