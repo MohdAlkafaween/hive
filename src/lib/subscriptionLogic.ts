@@ -21,6 +21,11 @@ export function computeExpiryDate(planType: PlanType, startDate: Date): Date {
  * Returns today's date as YYYY-MM-DD in the server's local timezone.
  * Using toISOString() would return UTC which causes midnight rollover issues
  * (e.g. 11pm local = next day in UTC).
+ *
+ * TODO: Timezone — this uses the server's system timezone (Date methods use local TZ).
+ * If the server is in UTC but the business operates in UTC+3 (Jordan), dates between
+ * midnight and 3 AM local time will be off by one day. Configure the server's TZ
+ * to match the business location (e.g., TZ=Asia/Amman) or implement explicit timezone handling.
  */
 export function todayString(): string {
   const now = new Date()
@@ -39,8 +44,8 @@ export function isSubscriptionActive(sub: {
 }): { active: boolean; reason?: string } {
   if (!sub.isActive) return { active: false, reason: 'Subscription is no longer active.' }
   if (new Date() > new Date(sub.expiryDate)) return { active: false, reason: 'Subscription has expired.' }
-  if (sub.planType !== 'Daily' && sub.visitsUsed >= sub.totalVisitsAllowed) {
-    return { active: false, reason: 'All visit days have been used.' }
+  if (sub.visitsUsed >= sub.totalVisitsAllowed && sub.totalVisitsAllowed !== -1) {
+    return { active: false, reason: 'All entries have been used.' }
   }
   return { active: true }
 }

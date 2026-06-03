@@ -5,7 +5,7 @@ import { isValidId } from '@/lib/sanitize'
 
 export async function POST(req: NextRequest) {
   try {
-    const session = await requireAuth('ADMIN', 'STAFF')
+    const session = await requireAuth('ADMIN', 'MANAGER', 'STAFF')
     if (session instanceof Response) return session
 
     const body = await req.json().catch(() => null)
@@ -26,6 +26,18 @@ export async function POST(req: NextRequest) {
       data: { checkOutTime: new Date() },
       include: { student: true },
     })
+
+    // F9: Audit log for checkout
+    await prisma.staffAuditLog.create({
+      data: {
+        userId: session.userId as number,
+        email: session.email as string || '',
+        role: session.role as string || '',
+        event: 'CHECKOUT' as any,
+        details: `Checked out student ${log.student?.fullName || log.studentName} (ID: ${log.studentId})`,
+      },
+    }).catch(() => {})
+
     return Response.json(log)
   } catch (e: any) {
     console.error('[POST /api/checkout]', e)

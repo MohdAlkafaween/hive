@@ -72,10 +72,10 @@ export async function POST(req: NextRequest) {
 
     // Use interactive transaction for atomic receipt number generation
     const result = await prisma.$transaction(async (tx) => {
-      // Deactivate existing subscriptions
+      // Deactivate existing subscriptions and clear windowStart (F11)
       await tx.subscription.updateMany({
         where: { studentId: Number(studentId), isActive: true },
-        data: { isActive: false },
+        data: { isActive: false, windowStart: null },
       })
 
       // Generate receipt number atomically
@@ -106,6 +106,7 @@ export async function POST(req: NextRequest) {
       const transaction = await tx.transaction.create({
         data: {
           studentId: Number(studentId),
+          subscriptionId: subscription.id, // F15: FK link to subscription
           studentName: student.fullName,
           amountPaid: amount,
           planType: plan,
@@ -118,7 +119,16 @@ export async function POST(req: NextRequest) {
       return { subscription, transaction, receiptNumber }
     })
 
-    return Response.json(result, { status: 201 })
+    // F12: Check if student has an open log (active session under previous subscription)
+    const openLog = await prisma.log.findFirst({
+      where: { studentId: Number(studentId), checkOutTime: null },
+    })
+
+    return Response.json({
+      ...result,
+      activeSessionWarning: !!openLog,
+      activeSessionMessage: openLog ? 'Student is currently checked in. Their session will continue until auto-checkout.' : undefined,
+    }, { status: 201 })
   } catch (e: any) {
     console.error('[POST /api/subscriptions]', e)
     if (e?.code === 'P2003') return Response.json({ error: 'Student not found' }, { status: 404 })

@@ -729,6 +729,19 @@ const translations: Record<Lang, Record<string, string>> = {
     'checkin.dismiss': 'Click anywhere to dismiss',
     'checkin.unknown': 'Unknown',
 
+    // 24h Check-In Window
+    'dash.windowEndsIn': 'Check-in window ends in {min} minutes',
+    'dash.subEnded': 'Subscription has ended — no entries remaining',
+    'dash.checkedOutSuccess': 'Checked out successfully!',
+    'dash.alreadyCheckedInError': 'Student is already checked in',
+    'addStudent.checkInNow': 'Check In Now',
+    'dash.minutesLeft': '{min}m left',
+    'renew.currentSubWarning': 'Current subscription has {days} days and {entries} entries remaining. Renewing now will deactivate it.',
+    'renew.activeSessionWarning': 'Student is currently checked in. Their session will continue until auto-checkout.',
+    'renew.subscriptionCreated': 'Subscription created successfully!',
+    'renew.checkInNow': 'Check In Now',
+    'renew.doneClose': 'Done — Close',
+
     // Footer
     'footer.rights': 'HIVE.space © 2026 Coworking Management Engine',
     'footer.hotkeys': 'Keyboard hotkeys: [F1] [F2] [Esc]',
@@ -1532,6 +1545,19 @@ const translations: Record<Lang, Record<string, string>> = {
     'checkin.openProfile': 'فتح الملف للتجديد',
     'checkin.dismiss': 'انقر في أي مكان للإغلاق',
     'checkin.unknown': 'غير معروف',
+
+    // 24h Check-In Window
+    'dash.windowEndsIn': 'نافذة الدخول تنتهي خلال {min} دقيقة',
+    'dash.subEnded': 'انتهى الاشتراك — لا زيارات متبقية',
+    'dash.checkedOutSuccess': 'تم تسجيل الخروج بنجاح!',
+    'dash.alreadyCheckedInError': 'الطالب مسجل بالفعل',
+    'addStudent.checkInNow': 'تسجيل دخول الآن',
+    'dash.minutesLeft': '{min} دقيقة متبقية',
+    'renew.currentSubWarning': 'الاشتراك الحالي متبقي فيه {days} يوم و {entries} زيارة. التجديد الآن سيلغيه.',
+    'renew.activeSessionWarning': 'الطالب مسجل دخول حالياً. ستستمر جلسته حتى الخروج التلقائي.',
+    'renew.subscriptionCreated': 'تم إنشاء الاشتراك بنجاح!',
+    'renew.checkInNow': 'تسجيل دخول الآن',
+    'renew.doneClose': 'تم — إغلاق',
 
     // Footer
     'footer.rights': 'HIVE.space © 2026 محرك إدارة مساحات العمل',

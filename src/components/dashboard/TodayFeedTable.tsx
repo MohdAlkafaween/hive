@@ -1,8 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { todayString } from '@/lib/subscriptionLogic'
-import { LogOut, RefreshCw, Clock, AlertTriangle, CalendarDays, EyeOff, UserX, Loader2, Smartphone, User } from 'lucide-react'
+import { LogOut, RefreshCw, Clock, AlertTriangle, CalendarDays, EyeOff, UserX, Loader2, Smartphone, User, Bell, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { useI18n } from '@/lib/i18n'
@@ -13,6 +12,7 @@ interface LogEntry {
   checkInTime: string
   checkOutTime?: string
   studentName: string
+  minutesRemaining?: number | null
   method?: string
   processedBy?: number | null
   processedByUser?: { name: string; email: string } | null
@@ -24,13 +24,20 @@ interface LogEntry {
   } | null
 }
 
+interface Notifications {
+  expiringCheckIns: { id: number; studentName: string; studentId: number | null; minutesRemaining: number }[]
+  expiredSubscriptions: { studentId: number; studentName: string }[]
+  autoCheckedOut: number
+}
+
 interface TodayFeedTableProps {
   refreshTrigger?: number
   onLogsFetched?: (logs: LogEntry[]) => void
+  onNotifications?: (notifications: Notifications) => void
   userRole?: string | null
 }
 
-export function TodayFeedTable({ refreshTrigger, onLogsFetched, userRole }: TodayFeedTableProps) {
+export function TodayFeedTable({ refreshTrigger, onLogsFetched, onNotifications, userRole }: TodayFeedTableProps) {
   const router = useRouter()
   const { t } = useI18n()
   const { toast } = useToast()
@@ -45,8 +52,8 @@ export function TodayFeedTable({ refreshTrigger, onLogsFetched, userRole }: Toda
     try {
       const stored = localStorage.getItem('hive-hidden-logs')
       if (stored) {
-        const { date, ids } = JSON.parse(stored)
-        if (date === todayString()) return new Set(ids)
+        const { ids } = JSON.parse(stored)
+        return new Set(ids)
       }
     } catch {}
     return new Set()
@@ -76,33 +83,24 @@ export function TodayFeedTable({ refreshTrigger, onLogsFetched, userRole }: Toda
       const res = await fetch('/api/logs/today')
       if (res.ok) {
         const data = await res.json()
-        setLogs(data)
-        onLogsFetched?.(data)
+        // Handle both new format (object with logs + notifications) and legacy format (array)
+        const logsList = Array.isArray(data) ? data : (data.logs || [])
+        setLogs(logsList)
+        onLogsFetched?.(logsList)
+        if (!Array.isArray(data) && data.notifications) {
+          onNotifications?.(data.notifications)
+        }
       }
     } finally {
       setLoading(false)
     }
-  }, [onLogsFetched])
+  }, [onLogsFetched, onNotifications])
 
   useEffect(() => { fetchLogs() }, [fetchLogs, refreshTrigger])
 
   useEffect(() => {
     const interval = setInterval(fetchLogs, 30_000)
     return () => clearInterval(interval)
-  }, [fetchLogs])
-
-  // At midnight: cleanup old checked-out logs, then refresh
-  useEffect(() => {
-    const now = new Date()
-    const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 1)
-    const msUntilMidnight = tomorrow.getTime() - now.getTime()
-    const timer = setTimeout(async () => {
-      try {
-        await fetch('/api/logs/cleanup', { method: 'POST' })
-      } catch {}
-      fetchLogs()
-    }, msUntilMidnight)
-    return () => clearTimeout(timer)
   }, [fetchLogs])
 
   const handleCheckOut = async (logId: number) => {
@@ -124,10 +122,7 @@ export function TodayFeedTable({ refreshTrigger, onLogsFetched, userRole }: Toda
     setHiddenIds(prev => {
       const next = new Set([...prev, confirmId])
       try {
-        localStorage.setItem('hive-hidden-logs', JSON.stringify({
-          date: todayString(),
-          ids: [...next],
-        }))
+        localStorage.setItem('hive-hidden-logs', JSON.stringify({ ids: [...next] }))
       } catch {}
       return next
     })
@@ -137,7 +132,6 @@ export function TodayFeedTable({ refreshTrigger, onLogsFetched, userRole }: Toda
   const visibleLogs = logs.filter(l => !hiddenIds.has(l.id))
   const insideCount = visibleLogs.filter(l => !l.checkOutTime).length
   const fmt = (iso: string) => new Date(iso).toLocaleTimeString('en-JO', { hour: '2-digit', minute: '2-digit' })
-  const now = new Date()
 
   return (
     <div className="hive-card !p-0 flex flex-col flex-1 min-h-0 overflow-hidden">
@@ -195,11 +189,14 @@ export function TodayFeedTable({ refreshTrigger, onLogsFetched, userRole }: Toda
               {visibleLogs.map((log) => {
                 let warning = null;
                 const sub = log.student?.subscriptions?.find(s => s.isActive);
+                const now = new Date()
                 if (sub) {
                   const visitsLeft = sub.totalVisitsAllowed ? sub.totalVisitsAllowed - sub.visitsUsed : Infinity;
                   const daysLeft = Math.ceil((new Date(sub.expiryDate).getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
                   if (visitsLeft <= 2 || daysLeft <= 2) {
-                    warning = visitsLeft <= 2 ? `${visitsLeft} visit${visitsLeft === 1 ? '' : 's'} left` : `${daysLeft} day${daysLeft === 1 ? '' : 's'} left`;
+                    warning = visitsLeft <= 2
+                      ? `${visitsLeft} ${visitsLeft === 1 ? t('dash.visitLeft') : t('dash.visitsLeft')}`
+                      : `${daysLeft} ${daysLeft === 1 ? t('dash.dayLeft') : t('dash.daysLeft')}`;
                   }
                 }
 
@@ -251,6 +248,9 @@ export function TodayFeedTable({ refreshTrigger, onLogsFetched, userRole }: Toda
                           style={{ background: 'rgba(255,255,255,0.04)' }}
                         >
                           {fmt(log.checkOutTime)}
+                          {log.method === 'AUTO_CHECKOUT' && (
+                            <span className="ml-1.5 text-[9px] font-bold text-orange-400 uppercase">auto</span>
+                          )}
                         </span>
                       ) : (
                         <span className="flex items-center gap-1.5 text-xs font-bold text-[#F5C518] uppercase tracking-wider px-2 py-1 rounded w-fit"
@@ -269,17 +269,26 @@ export function TodayFeedTable({ refreshTrigger, onLogsFetched, userRole }: Toda
                         const h = Math.floor(hours)
                         const m = Math.floor((hours - h) * 60)
                         const label = h > 0 ? `${h}h ${m}m` : `${m}m`
-                        const isLong = hours >= 8
-                        const isWarning = hours >= 6 && hours < 8
+                        const isExpiring = !log.checkOutTime && log.minutesRemaining != null && log.minutesRemaining <= 60
+                        const isLong = hours >= 20
+                        const isWarning = hours >= 16 && hours < 20
                         return (
-                          <span className={`text-xs font-bold px-2 py-1 rounded ${
-                            isLong ? 'bg-red-500/10 text-red-400 border border-red-500/20' :
-                            isWarning ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20' :
-                            'text-white/40'
-                          }`}>
-                            {isLong && <AlertTriangle size={10} className="inline mr-1" />}
-                            {label}
-                          </span>
+                          <div className="flex items-center gap-1.5">
+                            <span className={`text-xs font-bold px-2 py-1 rounded ${
+                              isExpiring ? 'bg-red-500/10 text-red-400 border border-red-500/20' :
+                              isLong ? 'bg-orange-500/10 text-orange-400 border border-orange-500/20' :
+                              isWarning ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20' :
+                              'text-white/40'
+                            }`}>
+                              {(isExpiring || isLong) && <AlertTriangle size={10} className="inline mr-1" />}
+                              {label}
+                            </span>
+                            {!log.checkOutTime && log.minutesRemaining != null && log.minutesRemaining <= 60 && (
+                              <span className="text-[9px] font-bold text-red-400 animate-pulse">
+                                {t('dash.minutesLeft').replace('{min}', String(log.minutesRemaining))}
+                              </span>
+                            )}
+                          </div>
                         )
                       })()}
                     </td>

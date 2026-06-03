@@ -1,6 +1,6 @@
 ﻿'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { ArrowLeft, CreditCard, RefreshCw, Loader2, User, Phone, BookOpen, Activity, Calendar, Hash, CheckCircle, XCircle, Trash2, AlertTriangle, Edit3, Save, Plus, Minus, Camera, Snowflake, QrCode, StickyNote, Send, X, Coffee } from 'lucide-react'
+import { ArrowLeft, CreditCard, RefreshCw, Loader2, User, Phone, BookOpen, Activity, Calendar, Hash, CheckCircle, XCircle, Trash2, AlertTriangle, Edit3, Save, Plus, Minus, Camera, Snowflake, QrCode, StickyNote, Send, X, Coffee, LogIn, LogOut, Clock } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { RenewModal } from './RenewModal'
@@ -73,6 +73,11 @@ export function ProfileView({ studentId, onBack }: ProfileViewProps) {
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState('')
 
+  // Check-in/out state
+  const [checkInStatus, setCheckInStatus] = useState<{ checkedIn: boolean; logId: number | null; checkInTime: string | null }>({ checkedIn: false, logId: null, checkInTime: null })
+  const [checkInLoading, setCheckInLoading] = useState(false)
+  const [checkInMsg, setCheckInMsg] = useState('')
+
   // Edit entries state
   const [editingEntries, setEditingEntries] = useState(false)
   const [entryAdjust, setEntryAdjust] = useState(0)
@@ -120,6 +125,66 @@ export function ProfileView({ studentId, onBack }: ProfileViewProps) {
   }, [studentId])
 
   useEffect(() => { fetchStudent() }, [fetchStudent])
+
+  // Fetch current check-in status (is student currently checked in?)
+  // An open log (no checkOutTime) means the student is inside.
+  // autoCheckoutExpired runs on every dashboard/checkin load and closes stale logs.
+  useEffect(() => {
+    if (!student) return
+    const activeLog = student.logs?.find((l: Log) => !l.checkOutTime)
+    if (activeLog) {
+      setCheckInStatus({ checkedIn: true, logId: activeLog.id, checkInTime: activeLog.checkInTime })
+    } else {
+      setCheckInStatus({ checkedIn: false, logId: null, checkInTime: null })
+    }
+  }, [student])
+
+  const handleProfileCheckIn = async () => {
+    setCheckInLoading(true)
+    setCheckInMsg('')
+    try {
+      const res = await fetch('/api/checkin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ studentId }),
+      })
+      const data = await res.json()
+      if (res.ok && (data.status === 'OK' || data.status === 'ALREADY_IN')) {
+        setCheckInMsg(data.status === 'ALREADY_IN' ? t('dash.alreadyCheckedIn') : t('dash.checkedInSuccess'))
+        fetchStudent()
+      } else {
+        setCheckInMsg(data.reason || data.error || t('dash.checkInFailed'))
+      }
+    } catch {
+      setCheckInMsg(t('dash.connectionError'))
+    } finally {
+      setCheckInLoading(false)
+    }
+  }
+
+  const handleProfileCheckOut = async () => {
+    if (!checkInStatus.logId) return
+    setCheckInLoading(true)
+    setCheckInMsg('')
+    try {
+      const res = await fetch('/api/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ logId: checkInStatus.logId }),
+      })
+      if (res.ok) {
+        setCheckInMsg(t('dash.checkedOutSuccess'))
+        fetchStudent()
+      } else {
+        const data = await res.json().catch(() => ({}))
+        setCheckInMsg(data.error || 'Check-out failed')
+      }
+    } catch {
+      setCheckInMsg(t('dash.connectionError'))
+    } finally {
+      setCheckInLoading(false)
+    }
+  }
 
   useEffect(() => {
     if (!linkingRfid) return
@@ -349,6 +414,41 @@ export function ProfileView({ studentId, onBack }: ProfileViewProps) {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {/* Check In / Check Out button */}
+          {!editingProfile && (
+            checkInStatus.checkedIn ? (
+              <button
+                onClick={handleProfileCheckOut}
+                disabled={checkInLoading}
+                className="flex items-center gap-2 px-4 py-2.5 bg-orange-500/10 border border-orange-500/20 text-orange-400 rounded-xl text-sm font-bold hover:bg-orange-500/20 transition-all disabled:opacity-40"
+              >
+                {checkInLoading ? <Loader2 size={16} className="animate-spin" /> : <LogOut size={16} />}
+                {t('dash.checkOut')}
+                {checkInStatus.checkInTime && (() => {
+                  const mins = Math.floor((Date.now() - new Date(checkInStatus.checkInTime).getTime()) / 60000)
+                  const h = Math.floor(mins / 60)
+                  const m = mins % 60
+                  return <span className="ml-1 text-xs text-orange-300/60">({h}h {m}m)</span>
+                })()}
+              </button>
+            ) : (
+              <button
+                onClick={handleProfileCheckIn}
+                disabled={checkInLoading}
+                className="flex items-center gap-2 px-4 py-2.5 bg-green-500/10 border border-green-500/20 text-green-400 rounded-xl text-sm font-bold hover:bg-green-500/20 transition-all disabled:opacity-40"
+              >
+                {checkInLoading ? <Loader2 size={16} className="animate-spin" /> : <LogIn size={16} />}
+                {t('dash.checkIn')}
+              </button>
+            )
+          )}
+          {checkInMsg && !editingProfile && (
+            <span className={`text-xs font-medium px-2 py-1 rounded-lg ${
+              checkInMsg.includes('success') || checkInMsg.includes('بنجاح') ? 'text-green-400 bg-green-500/10' : 'text-amber-400 bg-amber-500/10'
+            }`}>
+              {checkInMsg}
+            </span>
+          )}
           {editingProfile ? (
             <>
               <button onClick={() => setEditingProfile(false)}

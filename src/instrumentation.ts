@@ -1,13 +1,15 @@
+// Track interval to prevent stacking on dev hot reloads (F6)
+let scheduledInterval: ReturnType<typeof setInterval> | null = null
+
 export async function register() {
   if (process.env.NEXT_RUNTIME === 'nodejs') {
-    const { cleanupStaleSessions } = await import('@/lib/autoCheckout')
-
-    // Cleanup stale sessions from previous days on startup
+    // Auto-checkout expired 24h sessions on startup
     try {
-      const count = await cleanupStaleSessions()
-      if (count > 0) console.log(`[startup] Auto-checked-out ${count} stale session(s)`)
+      const { autoCheckoutExpired } = await import('@/lib/autoCheckout')
+      const result = await autoCheckoutExpired()
+      if (result.count > 0) console.log(`[startup] Auto-checked-out ${result.count} expired session(s)`)
     } catch (e) {
-      console.error('[startup] Stale session cleanup failed:', e)
+      console.error('[startup] Auto-checkout cleanup failed:', e)
     }
 
     // Run startup backup
@@ -19,22 +21,20 @@ export async function register() {
       console.error('[startup] Backup failed:', e)
     }
 
-    // Schedule backup + auto-checkout check every 60 seconds
-    let lastBackupHour = -1
-    setInterval(async () => {
-      try {
-        const { default: prisma } = await import('@/lib/prisma')
-        const setting = await prisma.appSetting.findUnique({ where: { key: 'autoCheckoutTime' } })
-        if (!setting?.value) return
+    // F6: Clear existing interval before creating a new one (prevents stacking on dev hot reload)
+    if (scheduledInterval) {
+      clearInterval(scheduledInterval)
+    }
 
-        const now = new Date()
-        const [h, m] = setting.value.split(':').map(Number)
-        if (now.getHours() === h && now.getMinutes() === m) {
-          const { autoCheckoutAll } = await import('@/lib/autoCheckout')
-          const count = await autoCheckoutAll()
-          if (count > 0) {
-            console.log(`[auto-checkout] Checked out ${count} student(s) at ${setting.value}`)
-          }
+    // Schedule auto-checkout + backup check every 60 seconds
+    let lastBackupHour = -1
+    scheduledInterval = setInterval(async () => {
+      // Auto-checkout expired 24h sessions
+      try {
+        const { autoCheckoutExpired } = await import('@/lib/autoCheckout')
+        const result = await autoCheckoutExpired()
+        if (result.count > 0) {
+          console.log(`[auto-checkout] Checked out ${result.count} expired session(s)`)
         }
       } catch (e) {
         console.error('[auto-checkout] Scheduled check failed:', e)

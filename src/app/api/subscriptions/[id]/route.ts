@@ -41,13 +41,20 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     }
     if (body.totalVisitsAllowed !== undefined) {
       const v = Number(body.totalVisitsAllowed)
-      if (!Number.isInteger(v) || v < 0) return Response.json({ error: 'totalVisitsAllowed must be a non-negative integer' }, { status: 400 })
+      if (!Number.isInteger(v) || v < -1) return Response.json({ error: 'totalVisitsAllowed must be -1 (unlimited) or a non-negative integer' }, { status: 400 })
       data.totalVisitsAllowed = v
       changes.push(`totalVisitsAllowed: ${existingSub.totalVisitsAllowed} -> ${v}`)
     }
 
     if (Object.keys(data).length === 0) {
       return Response.json({ error: 'No valid fields to update' }, { status: 400 })
+    }
+
+    // F17: Cross-field validation — visitsUsed cannot exceed totalVisitsAllowed (unless unlimited)
+    const effectiveTotal = data.totalVisitsAllowed !== undefined ? (data.totalVisitsAllowed as number) : existingSub.totalVisitsAllowed
+    const effectiveUsed = data.visitsUsed !== undefined ? (data.visitsUsed as number) : existingSub.visitsUsed
+    if (effectiveTotal !== -1 && effectiveUsed > effectiveTotal) {
+      return Response.json({ error: 'visitsUsed cannot exceed totalVisitsAllowed' }, { status: 400 })
     }
 
     const sub = await prisma.subscription.update({

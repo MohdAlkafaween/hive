@@ -3,6 +3,12 @@ import prisma from '@/lib/prisma'
 import { isSubscriptionActive, todayString } from '@/lib/subscriptionLogic'
 import { checkRateLimit, getClientIp } from '@/lib/rateLimit'
 import { sanitizeString } from '@/lib/sanitize'
+import { autoExpireSubscriptions } from '@/lib/autoExpire'
+import { autoCheckoutExpired } from '@/lib/autoCheckout'
+import { getCapacityInfo } from '@/lib/capacity'
+import { verifyAuth } from '@/lib/auth'
+
+const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000
 
 // POST — check-in via QR token (public, rate-limited like kiosk)
 export async function POST(req: NextRequest) {
@@ -10,6 +16,10 @@ export async function POST(req: NextRequest) {
     const ip = getClientIp(req)
     const limit = checkRateLimit(`checkin-qr:${ip}`, 30, 60 * 1000)
     if (limit.limited) return Response.json({ error: 'Too many requests' }, { status: 429 })
+
+    // Auto-expire stale subscriptions and auto-checkout expired 24h sessions (F2 fix)
+    await autoExpireSubscriptions().catch(() => {})
+    await autoCheckoutExpired().catch(() => {})
 
     const body = await req.json().catch(() => null)
     if (!body) return Response.json({ error: 'Invalid body' }, { status: 400 })
@@ -19,7 +29,18 @@ export async function POST(req: NextRequest) {
 
     const student = await prisma.student.findUnique({
       where: { qrToken: token },
-      include: { subscriptions: { where: { isActive: true }, orderBy: { createdAt: 'desc' }, take: 1 } },
+      include: {
+        subscriptions: {
+          where: {
+            OR: [
+              { isActive: true },
+              { windowStart: { not: null } },
+            ],
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
+      },
     })
 
     if (!student) return Response.json({ status: 'NOT_FOUND', reason: 'Student not found.' }, { status: 404 })
@@ -38,45 +59,125 @@ export async function POST(req: NextRequest) {
 
     if (sub.isFrozen) return Response.json({ status: 'EXPIRED', reason: 'Subscription is frozen.', student })
 
-    const check = isSubscriptionActive(sub)
-    if (!check.active) {
-      await prisma.subscription.update({ where: { id: sub.id }, data: { isActive: false } })
-      return Response.json({ status: 'EXPIRED', reason: check.reason, student })
+    // Check if this subscription has an active 24h window (even if deactivated by autoExpire)
+    const now = new Date()
+    const hasActiveWindow = sub.windowStart &&
+      (now.getTime() - new Date(sub.windowStart).getTime()) < TWENTY_FOUR_HOURS_MS
+
+    // If subscription is deactivated AND no active window, block
+    if (!sub.isActive && !hasActiveWindow) {
+      return Response.json({ status: 'EXPIRED', reason: 'Subscription has expired.', student })
     }
 
-    const today = todayString()
-    const existingLog = await prisma.log.findFirst({
-      where: { studentId: student.id, date: today, checkOutTime: null },
+    // If subscription is active, validate fully; skip if inactive but has active window
+    if (sub.isActive) {
+      const check = isSubscriptionActive(sub)
+      if (!check.active) {
+        if (!hasActiveWindow) {
+          await prisma.subscription.update({ where: { id: sub.id }, data: { isActive: false } })
+          return Response.json({ status: 'EXPIRED', reason: check.reason, student })
+        }
+        await prisma.subscription.update({ where: { id: sub.id }, data: { isActive: false } })
+      }
+    }
+
+    // Step 1: Is the student currently checked in (has open log)?
+    const existingActiveLog = await prisma.log.findFirst({
+      where: { studentId: student.id, checkOutTime: null },
     })
 
-    if (existingLog) {
+    if (existingActiveLog) {
       return Response.json({
-        status: 'ALREADY_IN', student, subscription: sub,
-        remainingVisits: sub.planType === 'Daily' ? null : sub.totalVisitsAllowed - sub.visitsUsed,
-        logId: existingLog.id, alreadyCheckedInToday: true,
+        status: 'ALREADY_IN',
+        reason: 'Student is already checked in.',
+        student, subscription: sub,
+        remainingVisits: sub.totalVisitsAllowed === -1 ? null : sub.totalVisitsAllowed - sub.visitsUsed,
+        logId: existingActiveLog.id, alreadyCheckedInToday: true,
       })
     }
 
-    // Wrap in transaction to prevent race conditions from concurrent QR scans
+    // F1 fix: Check capacity limit (same as RFID route)
+    const capacity = await getCapacityInfo()
+    if (capacity.isFull) {
+      return Response.json({
+        status: 'FULL',
+        reason: `Venue is at full capacity (${capacity.maxCapacity}). Please try again later.`,
+        student,
+        currentOccupancy: capacity.currentOccupancy,
+        maxCapacity: capacity.maxCapacity,
+      })
+    }
+
+    // F3 fix: Detect staff session for processedBy attribution
+    const session = await verifyAuth().catch(() => null)
+    const staffUserId = session?.userId ? (session.userId as number) : null
+
+    const today = todayString()
+
+    if (hasActiveWindow) {
+      // WITHIN 24h window: create log, NO entry deduction
+      const result = await prisma.$transaction(async (tx) => {
+        const existingInTx = await tx.log.findFirst({
+          where: { studentId: student.id, checkOutTime: null },
+        })
+        if (existingInTx) return { duplicate: true, logId: existingInTx.id }
+
+        const log = await tx.log.create({
+          data: { studentId: student.id, studentName: student.fullName, date: today, method: 'QR', processedBy: staffUserId },
+        })
+
+        await tx.student.update({ where: { id: student.id }, data: { lifetimeCheckIns: { increment: 1 } } })
+
+        return { duplicate: false, logId: log.id }
+      })
+
+      if (result.duplicate) {
+        return Response.json({
+          status: 'ALREADY_IN', student, subscription: sub,
+          remainingVisits: sub.totalVisitsAllowed === -1 ? null : sub.totalVisitsAllowed - sub.visitsUsed,
+          logId: result.logId, alreadyCheckedInToday: true,
+        })
+      }
+
+      // F9: Audit log for QR check-in (window reuse)
+      await prisma.staffAuditLog.create({
+        data: {
+          userId: staffUserId,
+          email: staffUserId ? '' : 'kiosk',
+          role: staffUserId ? '' : 'KIOSK',
+          event: 'CHECKIN' as any,
+          details: `Checked in student ${student.fullName} (ID: ${student.id}) via QR [window reuse]`,
+        },
+      }).catch(() => {})
+
+      return Response.json({
+        status: 'OK', student, subscription: sub,
+        remainingVisits: sub.totalVisitsAllowed === -1 ? null : sub.totalVisitsAllowed - sub.visitsUsed,
+        logId: result.logId, windowReuse: true,
+      })
+    }
+
+    // OUTSIDE window: deduct 1 entry, start new 24h window
+    if (sub.totalVisitsAllowed !== -1 && sub.visitsUsed >= sub.totalVisitsAllowed) {
+      await prisma.subscription.update({ where: { id: sub.id }, data: { isActive: false } })
+      return Response.json({ status: 'EXPIRED', reason: 'All entries have been used.', student })
+    }
+
     const result = await prisma.$transaction(async (tx) => {
-      // Re-check inside transaction
       const existingInTx = await tx.log.findFirst({
-        where: { studentId: student.id, date: today, checkOutTime: null },
+        where: { studentId: student.id, checkOutTime: null },
       })
       if (existingInTx) return { duplicate: true, logId: existingInTx.id }
 
-      const anyLogToday = await tx.log.findFirst({ where: { studentId: student.id, date: today } })
-      const shouldDeductVisit = !anyLogToday
-
       const log = await tx.log.create({
-        data: { studentId: student.id, studentName: student.fullName, date: today, method: 'QR' },
+        data: { studentId: student.id, studentName: student.fullName, date: today, method: 'QR', processedBy: staffUserId },
       })
 
       let txSub = sub
-      if (shouldDeductVisit && sub.planType !== 'Daily') {
+      if (sub.totalVisitsAllowed !== -1) {
         txSub = await tx.subscription.update({
           where: { id: sub.id },
-          data: { visitsUsed: { increment: 1 } },
+          data: { visitsUsed: { increment: 1 }, windowStart: now },
         })
         if (txSub.visitsUsed >= txSub.totalVisitsAllowed) {
           txSub = await tx.subscription.update({
@@ -84,27 +185,44 @@ export async function POST(req: NextRequest) {
             data: { isActive: false },
           })
         }
+      } else {
+        // Unlimited: still set windowStart for auto-checkout
+        txSub = await tx.subscription.update({
+          where: { id: sub.id },
+          data: { windowStart: now },
+        })
       }
 
       await tx.student.update({ where: { id: student.id }, data: { lifetimeCheckIns: { increment: 1 } } })
 
-      return { duplicate: false, logId: log.id, updatedSub: txSub, shouldDeductVisit }
+      return { duplicate: false, logId: log.id, updatedSub: txSub }
     })
 
     if (result.duplicate) {
       return Response.json({
         status: 'ALREADY_IN', student, subscription: sub,
-        remainingVisits: sub.planType === 'Daily' ? null : sub.totalVisitsAllowed - sub.visitsUsed,
+        remainingVisits: sub.totalVisitsAllowed === -1 ? null : sub.totalVisitsAllowed - sub.visitsUsed,
         logId: result.logId, alreadyCheckedInToday: true,
       })
     }
 
-    const { updatedSub, shouldDeductVisit } = result as { updatedSub: typeof sub; shouldDeductVisit: boolean; logId: number; duplicate: false }
+    const { updatedSub } = result as { updatedSub: typeof sub; logId: number; duplicate: false }
+
+    // F9: Audit log for QR check-in (new window)
+    await prisma.staffAuditLog.create({
+      data: {
+        userId: staffUserId,
+        email: staffUserId ? '' : 'kiosk',
+        role: staffUserId ? '' : 'KIOSK',
+        event: 'CHECKIN' as any,
+        details: `Checked in student ${student.fullName} (ID: ${student.id}) via QR [new window, entry deducted]`,
+      },
+    }).catch(() => {})
 
     return Response.json({
       status: 'OK', student, subscription: updatedSub,
-      remainingVisits: sub.planType === 'Daily' ? null : updatedSub.totalVisitsAllowed - updatedSub.visitsUsed,
-      logId: result.logId, alreadyCheckedInToday: !shouldDeductVisit,
+      remainingVisits: updatedSub.totalVisitsAllowed === -1 ? null : updatedSub.totalVisitsAllowed - updatedSub.visitsUsed,
+      logId: result.logId,
     })
   } catch (e) {
     console.error('[POST /api/checkin/qr]', e)

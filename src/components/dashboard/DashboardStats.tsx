@@ -43,7 +43,8 @@ export function DashboardStats({ checkInCount }: DashboardStatsProps) {
   useEffect(() => {
     fetch('/api/logs/today')
       .then(r => r.ok ? r.json() : [])
-      .then((logs: any[]) => {
+      .then((data: any) => {
+        const logs = Array.isArray(data) ? data : (data.logs || [])
         const inside = logs.filter((l: any) => !l.checkOutTime).length
         setOccupancy(prev => ({ ...prev, current: inside }))
       })

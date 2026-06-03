@@ -1,7 +1,7 @@
 'use client'
 import { useState, useCallback, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { UserPlus, LogIn, X, Calendar, Clock, CreditCard, CheckCircle2, AlertTriangle, XCircle, Loader2, Megaphone } from 'lucide-react'
+import { UserPlus, LogIn, X, Calendar, Clock, CreditCard, CheckCircle2, AlertTriangle, XCircle, Loader2, Megaphone, Bell, LogOut } from 'lucide-react'
 import { SearchBar } from '@/components/dashboard/SearchBar'
 import { TodayFeedTable } from '@/components/dashboard/TodayFeedTable'
 import { AddStudentModal } from '@/components/dashboard/AddStudentModal'
@@ -11,7 +11,6 @@ import { WaitlistPanel } from '@/components/dashboard/WaitlistPanel'
 import { PageTransition } from '@/components/animations/PageTransition'
 import { useHiveStore } from '@/lib/store'
 import { useI18n } from '@/lib/i18n'
-// ReceiptModal is now handled inside AddStudentModal
 
 interface SelectedStudent {
   id: number
@@ -28,6 +27,12 @@ interface SubInfo {
   isActive: boolean
 }
 
+interface Notifications {
+  expiringCheckIns: { id: number; studentName: string; studentId: number | null; minutesRemaining: number }[]
+  expiredSubscriptions: { studentId: number; studentName: string }[]
+  autoCheckedOut: number
+}
+
 type CheckInStatus = 'idle' | 'loading' | 'success' | 'warning' | 'error'
 
 export default function DashboardPage() {
@@ -38,6 +43,8 @@ export default function DashboardPage() {
   const { t } = useI18n()
 
   const [announcement, setAnnouncement] = useState('')
+  const [notifications, setNotifications] = useState<Notifications | null>(null)
+  const [dismissedNotifications, setDismissedNotifications] = useState<Set<string>>(() => new Set())
 
   useEffect(() => {
     fetch('/api/auth/me').then(r => r.json()).then(d => { if (d.user) setUserRole(d.user.role) }).catch(() => {})
@@ -45,8 +52,6 @@ export default function DashboardPage() {
       if (s.announcement) setAnnouncement(s.announcement)
     }).catch(() => {})
   }, [])
-
-  // receipt is handled inside AddStudentModal now
 
   // Selected student for check-in
   const [selected, setSelected] = useState<SelectedStudent | null>(null)
@@ -128,7 +133,7 @@ export default function DashboardPage() {
             setCheckInMsg(`${t('dash.checkedInSuccess')} (${visitsLeft !== null ? visitsLeft + ' ' + t('dash.visitsLeft') : daysLeft + ' ' + t('dash.daysLeft')})`)
           } else {
             setCheckInStatus('success')
-            setCheckInMsg(data.alreadyCheckedInToday ? t('dash.checkedInBack') : t('dash.checkedInSuccess'))
+            setCheckInMsg(t('dash.checkedInSuccess'))
           }
         }
         setRefreshTrigger((n) => n + 1)
@@ -147,13 +152,25 @@ export default function DashboardPage() {
     }
   }, [selected, setOverlay, t])
 
+  // Quick checkout from notification
+  const handleQuickCheckout = async (logId: number) => {
+    try {
+      await fetch('/api/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ logId }),
+      })
+      setRefreshTrigger(n => n + 1)
+    } catch {}
+  }
+
   // Subscription status helpers
   function getSubStatus(sub: SubInfo | null): { label: string; color: string; daysLeft: number | null; visitsLeft: number | null } {
     if (!sub) return { label: t('dash.noSubscription'), color: 'red', daysLeft: null, visitsLeft: null }
     const now = new Date()
     const expiry = new Date(sub.expiryDate)
     const daysLeft = Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
-    const visitsLeft = sub.planType === 'Daily' ? null : sub.totalVisitsAllowed - sub.visitsUsed
+    const visitsLeft = sub.totalVisitsAllowed === -1 ? null : sub.totalVisitsAllowed - sub.visitsUsed
 
     if (!sub.isActive) return { label: t('dash.inactive'), color: 'red', daysLeft, visitsLeft }
     if (daysLeft <= 0) return { label: t('dash.expired'), color: 'red', daysLeft: 0, visitsLeft }
@@ -163,6 +180,10 @@ export default function DashboardPage() {
   }
 
   const subStatus = getSubStatus(subInfo)
+
+  // Filter undismissed notifications
+  const expiringAlerts = notifications?.expiringCheckIns?.filter(n => !dismissedNotifications.has(`expiring-${n.id}`)) || []
+  const subEndedAlerts = notifications?.expiredSubscriptions?.filter(n => !dismissedNotifications.has(`subended-${n.studentId}`)) || []
 
   return (
     <PageTransition>
@@ -210,6 +231,69 @@ export default function DashboardPage() {
           </button>
         </motion.div>
       )}
+
+      {/* 24h Window Notifications (Rule 5 & 6) */}
+      <AnimatePresence>
+        {expiringAlerts.length > 0 && (
+          <motion.div
+            className="space-y-2"
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+          >
+            {expiringAlerts.map(alert => (
+              <div key={alert.id} className="flex items-center gap-3 px-5 py-3 rounded-xl"
+                style={{ background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.2)' }}
+              >
+                <Bell size={16} className="text-amber-400 shrink-0 animate-pulse" />
+                <p className="text-sm font-medium text-amber-300 flex-1">
+                  <span className="font-bold">{alert.studentName}</span> — {t('dash.windowEndsIn').replace('{min}', String(alert.minutesRemaining))}
+                </p>
+                <button
+                  onClick={() => handleQuickCheckout(alert.id)}
+                  className="px-3 py-1.5 rounded-lg bg-amber-500/20 text-amber-300 text-xs font-bold hover:bg-amber-500/30 transition-all flex items-center gap-1"
+                >
+                  <LogOut size={12} /> {t('dash.checkOut')}
+                </button>
+                <button
+                  onClick={() => setDismissedNotifications(prev => new Set([...prev, `expiring-${alert.id}`]))}
+                  className="text-white/20 hover:text-white/40 p-1"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {subEndedAlerts.length > 0 && (
+          <motion.div
+            className="space-y-2"
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+          >
+            {subEndedAlerts.map(alert => (
+              <div key={alert.studentId} className="flex items-center gap-3 px-5 py-3 rounded-xl"
+                style={{ background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.2)' }}
+              >
+                <XCircle size={16} className="text-red-400 shrink-0" />
+                <p className="text-sm font-medium text-red-300 flex-1">
+                  <span className="font-bold">{alert.studentName}</span> — {t('dash.subEnded')}
+                </p>
+                <button
+                  onClick={() => setDismissedNotifications(prev => new Set([...prev, `subended-${alert.studentId}`]))}
+                  className="text-white/20 hover:text-white/40 p-1"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Expiry Notifications */}
       <ExpiryBanner />
@@ -393,7 +477,12 @@ export default function DashboardPage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.3, duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
       >
-        <TodayFeedTable refreshTrigger={refreshTrigger} onLogsFetched={(logs) => setLogCount(logs.length)} userRole={userRole} />
+        <TodayFeedTable
+          refreshTrigger={refreshTrigger}
+          onLogsFetched={(logs) => setLogCount(logs.length)}
+          onNotifications={setNotifications}
+          userRole={userRole}
+        />
       </motion.section>
 
       {/* Waitlist Panel — shows when capacity is full */}

@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { todayString } from '@/lib/subscriptionLogic'
-import { Loader2, Ticket, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react'
+import { Loader2, Ticket, CheckCircle2, XCircle, AlertTriangle, LogIn } from 'lucide-react'
 import { PLAN_DEFAULTS, PlanType } from '@/lib/subscriptionLogic'
 import type { ReceiptData } from '@/components/dashboard/ReceiptModal'
 import { useI18n } from '@/lib/i18n'
@@ -48,6 +48,50 @@ export function RenewModal({ open, onClose, studentId, studentName, onRenewed }:
   const [saving, setSaving]     = useState(false)
   const [error, setError]       = useState('')
   const [plansWarning, setPlansWarning] = useState(false)
+  const [activeSessionMsg, setActiveSessionMsg] = useState('')
+
+  // Success state after subscription creation — shows "Check In Now" option
+  const [success, setSuccess] = useState(false)
+  const [pendingReceipt, setPendingReceipt] = useState<ReceiptData | null>(null)
+  const [checkingIn, setCheckingIn] = useState(false)
+  const [checkInResult, setCheckInResult] = useState<{ success: boolean; message: string } | null>(null)
+
+  // F13: Current subscription info for early-renewal warning
+  const [currentSub, setCurrentSub] = useState<{ daysLeft: number; entriesLeft: number | null } | null>(null)
+
+  // Reset success state when modal opens/closes
+  useEffect(() => {
+    if (!open) {
+      setSuccess(false)
+      setPendingReceipt(null)
+      setCheckingIn(false)
+      setCheckInResult(null)
+      setActiveSessionMsg('')
+    }
+  }, [open])
+
+  useEffect(() => {
+    if (!open) return
+    // Fetch student's current active subscription to warn about early renewal
+    fetch(`/api/students/${studentId}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data) return
+        const activeSub = data.subscriptions?.find((s: any) => s.isActive && new Date(s.expiryDate) > new Date())
+        if (activeSub) {
+          const daysLeft = Math.max(0, Math.ceil((new Date(activeSub.expiryDate).getTime() - Date.now()) / 86400000))
+          const entriesLeft = activeSub.totalVisitsAllowed === -1 ? null : Math.max(0, activeSub.totalVisitsAllowed - activeSub.visitsUsed)
+          if (daysLeft > 0 || (entriesLeft !== null && entriesLeft > 0)) {
+            setCurrentSub({ daysLeft, entriesLeft })
+          } else {
+            setCurrentSub(null)
+          }
+        } else {
+          setCurrentSub(null)
+        }
+      })
+      .catch(() => setCurrentSub(null))
+  }, [open, studentId])
 
   // Load plans from API, fallback to PLAN_DEFAULTS
   useEffect(() => {
@@ -178,6 +222,11 @@ export function RenewModal({ open, onClose, studentId, studentName, onRenewed }:
 
       const subData = await res.json()
 
+      // F12: Show active session warning if student was checked in under old subscription
+      if (subData.activeSessionWarning) {
+        setActiveSessionMsg(t('renew.activeSessionWarning'))
+      }
+
       if (promoApplied) {
         fetch(`/api/promo/${promoApplied.id}`, {
           method: 'PATCH',
@@ -199,7 +248,8 @@ export function RenewModal({ open, onClose, studentId, studentName, onRenewed }:
       const expiry = new Date(startDate)
       expiry.setDate(expiry.getDate() + selectedPlan.durationDays)
 
-      onRenewed({
+      // Store receipt data and show success state with "Check In Now" option
+      setPendingReceipt({
         studentName,
         plan: selectedPlan.name,
         amountPaid: finalAmount,
@@ -207,15 +257,108 @@ export function RenewModal({ open, onClose, studentId, studentName, onRenewed }:
         expiryDate: expiry.toISOString(),
         receiptNumber: subData.receiptNumber || undefined,
       })
-      onClose()
+      setSuccess(true)
     } finally {
       setSaving(false)
     }
   }
 
+  const handleCheckInNow = async () => {
+    setCheckingIn(true)
+    setCheckInResult(null)
+    try {
+      const res = await fetch('/api/checkin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ studentId }),
+      })
+      const data = await res.json()
+      if (res.ok && (data.status === 'OK' || data.status === 'ALREADY_IN')) {
+        setCheckInResult({ success: true, message: t('dash.checkedInSuccess') })
+        onRenewed(pendingReceipt ?? undefined)
+        // Auto-close after brief success display
+        setTimeout(() => onClose(), 1500)
+      } else {
+        setCheckInResult({ success: false, message: data.reason || data.error || t('dash.checkInFailed') })
+      }
+    } catch {
+      setCheckInResult({ success: false, message: t('dash.connectionError') })
+    } finally {
+      setCheckingIn(false)
+    }
+  }
+
+  const handleDoneClose = () => {
+    onRenewed(pendingReceipt ?? undefined)
+    onClose()
+  }
+
+  // Success state — subscription created, offer "Check In Now"
+  if (success) {
+    return (
+      <Modal open={open} onClose={handleDoneClose} title={`${t('renew.title')} · ${studentName}`} maxWidth="max-w-lg">
+        <div className="flex flex-col items-center text-center py-6" style={{ animation: 'fadeIn 0.4s ease-out' }}>
+          <div className="w-20 h-20 rounded-full flex items-center justify-center mb-5"
+            style={{ background: 'rgba(34, 197, 94, 0.1)', border: '2px solid rgba(34, 197, 94, 0.3)' }}
+          >
+            <CheckCircle2 size={40} className="text-green-400" />
+          </div>
+          <h3 className="text-lg font-bold text-white mb-2">{t('renew.subscriptionCreated')}</h3>
+          <p className="text-sm text-white/40 mb-6">{studentName}</p>
+
+          {/* F12: Active session warning */}
+          {activeSessionMsg && (
+            <div className="w-full flex items-start gap-2 text-sm font-medium text-blue-400 p-3 rounded-lg mb-4" style={{ background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
+              <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+              <span>{activeSessionMsg}</span>
+            </div>
+          )}
+
+          {checkInResult && (
+            <div className={`w-full px-4 py-3 rounded-xl text-sm font-medium mb-4 ${
+              checkInResult.success ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'
+            }`}>
+              {checkInResult.message}
+            </div>
+          )}
+
+          <div className="w-full space-y-3">
+            <button
+              onClick={handleCheckInNow}
+              disabled={checkingIn || checkInResult?.success}
+              className="w-full flex items-center justify-center gap-2.5 px-5 py-4 rounded-xl bg-green-500/20 border border-green-500/30 hover:bg-green-500/30 text-green-400 font-bold text-sm transition-all duration-200 active:scale-[0.98] disabled:opacity-40"
+            >
+              {checkingIn ? <Loader2 size={18} className="animate-spin" /> : <LogIn size={18} />}
+              {checkingIn ? t('common.loading') : t('renew.checkInNow')}
+            </button>
+
+            <button
+              onClick={handleDoneClose}
+              className="w-full py-3 text-sm text-white/25 hover:text-white/40 font-medium transition-colors"
+            >
+              {t('renew.doneClose')}
+            </button>
+          </div>
+        </div>
+      </Modal>
+    )
+  }
+
   return (
     <Modal open={open} onClose={onClose} title={`${t('renew.title')} · ${studentName}`} maxWidth="max-w-lg">
       <div className="space-y-6">
+        {/* F13: Early renewal warning */}
+        {currentSub && (
+          <div className="flex items-start gap-3 px-4 py-3 rounded-xl" style={{ background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.2)' }}>
+            <AlertTriangle size={16} className="text-amber-400 shrink-0 mt-0.5" />
+            <p className="text-sm font-medium text-amber-300">
+              {t('renew.currentSubWarning')
+                .replace('{days}', String(currentSub.daysLeft))
+                .replace('{entries}', currentSub.entriesLeft !== null ? String(currentSub.entriesLeft) : '∞')}
+            </p>
+          </div>
+        )}
+
         {/* Plan selector */}
         <div className="space-y-2">
           <label className="text-[11px] font-bold text-white/30 uppercase tracking-wider">{t('renew.plan')}</label>
@@ -357,6 +500,13 @@ export function RenewModal({ open, onClose, studentId, studentName, onRenewed }:
           )}
         </div>
 
+        {/* F12: Active session warning after renewal */}
+        {activeSessionMsg && (
+          <div className="flex items-start gap-2 text-sm font-medium text-blue-400 p-3 rounded-lg" style={{ background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
+            <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+            <span>{activeSessionMsg}</span>
+          </div>
+        )}
         {error && <p className="text-sm font-medium text-red-400 p-3 rounded-lg" style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)' }}>{error}</p>}
 
         <div className="flex gap-3 pt-2">
