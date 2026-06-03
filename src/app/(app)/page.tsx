@@ -44,6 +44,10 @@ export default function DashboardPage() {
 
   const [announcement, setAnnouncement] = useState('')
   const [notifications, setNotifications] = useState<Notifications | null>(null)
+
+  // Stable callbacks to avoid infinite re-render loop in TodayFeedTable
+  const handleLogsFetched = useCallback((logs: any[]) => setLogCount(logs.length), [])
+  const handleNotifications = useCallback((n: Notifications) => setNotifications(n), [])
   const [dismissedNotifications, setDismissedNotifications] = useState<Set<string>>(() => new Set())
 
   useEffect(() => {
@@ -479,8 +483,8 @@ export default function DashboardPage() {
       >
         <TodayFeedTable
           refreshTrigger={refreshTrigger}
-          onLogsFetched={(logs) => setLogCount(logs.length)}
-          onNotifications={setNotifications}
+          onLogsFetched={handleLogsFetched}
+          onNotifications={handleNotifications}
           userRole={userRole}
         />
       </motion.section>
