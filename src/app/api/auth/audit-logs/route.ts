@@ -1,5 +1,6 @@
 import prisma from '@/lib/prisma'
 import { requireAuth } from '@/lib/authGuard'
+import { checkStaffRateLimit } from '@/lib/rateLimit'
 
 /**
  * GET /api/auth/audit-logs?page=1&limit=50&userId=&event=
@@ -15,6 +16,9 @@ export async function GET(req: Request) {
   try {
     const session = await requireAuth('ADMIN')
     if (session instanceof Response) return session
+
+    const rl = checkStaffRateLimit(session.userId as number, 'read')
+    if (rl.limited) return Response.json({ error: 'Rate limit exceeded' }, { status: 429 })
 
     const url = new URL(req.url)
     const page = Math.max(1, Number(url.searchParams.get('page')) || 1)

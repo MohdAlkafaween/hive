@@ -17,9 +17,17 @@ export async function GET(req: Request, ctx: { params: Promise<{ uuid: string }>
     const cleanUuid = sanitizeRfid(uuid)
     if (!cleanUuid) return Response.json({ error: 'Invalid RFID' }, { status: 400 })
 
+    // SECURITY (D1): even the authenticated branch never needs credentials/PII extras
     const student = await prisma.student.findUnique({
       where: { rfidUuid: cleanUuid },
-      include: {
+      select: {
+        id: true,
+        studentNumber: true,
+        fullName: true,
+        phone: true,
+        status: true,
+        photoUrl: true,
+        lifetimeCheckIns: true,
         subscriptions: { where: { isActive: true }, orderBy: { createdAt: 'desc' }, take: 1 },
       },
     })

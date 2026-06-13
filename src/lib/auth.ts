@@ -1,5 +1,6 @@
 import { SignJWT, jwtVerify } from 'jose'
 import { cookies } from 'next/headers'
+import { STAFF_COOKIE_NAME } from '@/lib/cookieConfig'
 
 // Edge-safe auth utilities — NO Node.js imports allowed here.
 // This file is imported by middleware (Edge Runtime).
@@ -17,11 +18,11 @@ if (!JWT_SECRET) {
 }
 const key = new TextEncoder().encode(JWT_SECRET || DEV_ONLY_FALLBACK)
 
-export async function encrypt(payload: Record<string, unknown>) {
+export async function encrypt(payload: Record<string, unknown>, expiresIn: string = '8h') {
   return await new SignJWT(payload)
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
-    .setExpirationTime('8h')
+    .setExpirationTime(expiresIn)
     .sign(key)
 }
 
@@ -37,7 +38,7 @@ export async function decrypt(input: string): Promise<Record<string, unknown> | 
 }
 
 export async function getSession() {
-  const session = (await cookies()).get('session')?.value
+  const session = (await cookies()).get(STAFF_COOKIE_NAME)?.value
   if (!session) return null
   return await decrypt(session)
 }

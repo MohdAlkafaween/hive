@@ -2,11 +2,15 @@ import { NextRequest } from 'next/server'
 import prisma from '@/lib/prisma'
 import { requireAuth } from '@/lib/authGuard'
 import { isValidId } from '@/lib/sanitize'
+import { checkStaffRateLimit } from '@/lib/rateLimit'
 
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
     const session = await requireAuth('ADMIN', 'STAFF')
     if (session instanceof Response) return session
+
+    const rl = checkStaffRateLimit(session.userId as number, 'write')
+    if (rl.limited) return Response.json({ error: 'Rate limit exceeded' }, { status: 429 })
 
     const { id } = await ctx.params
     if (!isValidId(id)) return Response.json({ error: 'Invalid subscription ID' }, { status: 400 })
@@ -76,9 +80,9 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     }
 
     return Response.json(sub)
-  } catch (e: any) {
+  } catch (e) {
     console.error('[PATCH /api/subscriptions/[id]]', e)
-    if (e?.code === 'P2025') return Response.json({ error: 'Subscription not found' }, { status: 404 })
+    if (e instanceof Error && 'code' in e && (e as { code: string }).code === 'P2025') return Response.json({ error: 'Subscription not found' }, { status: 404 })
     return Response.json({ error: 'Failed to update subscription' }, { status: 500 })
   }
 }

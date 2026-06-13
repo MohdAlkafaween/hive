@@ -13,7 +13,7 @@ model User {
   password      String
   name          String           @default("")
   phone         String           @default("")
-  role          String           @default("STAFF") // Roles: ADMIN, MANAGER, STAFF
+  role          String           @default("STAFF") // Roles: ADMIN, MANAGER, STAFF, BARISTA
   permissions   String           @default("[]") // JSON array of allowed pages for MANAGER role
   isActive      Boolean          @default(true)
   createdById   Int?
@@ -58,6 +58,10 @@ model Student {
   qrToken          String?        @unique
   createdAt        DateTime       @default(now())
   lifetimeCheckIns Int            @default(0)
+  // Customer auth fields
+  password         String?        // bcrypt hash. null = staff-registered, hasn't set up login yet
+  isLoginEnabled   Boolean        @default(false) // admin can disable customer login
+  lastLoginAt      DateTime?      // track last customer login
   subscriptions    Subscription[]
   logs             Log[]
   transactions     Transaction[]
@@ -65,6 +69,7 @@ model Student {
   notes            StudentNote[]
   waitlistEntries  WaitlistEntry[]
   baristaOrders    BaristaOrder[]
+  feedbacks        ItemFeedback[]
 }
 
 model Subscription {
@@ -91,6 +96,7 @@ model Subscription {
 
   @@index([studentId, isActive])
   @@index([expiryDate])
+  @@index([windowStart])
 }
 
 model Log {
@@ -163,6 +169,7 @@ model MenuItem {
   createdAt    DateTime           @default(now())
   orders       BaristaOrder[]
   options      MenuItemOption[]
+  feedbacks    ItemFeedback[]
 }
 
 model MenuItemOption {
@@ -204,9 +211,17 @@ model BaristaOrder {
   selectedOptions String        @default("[]") // JSON of selected options
   paymentMethod   String        @default("CASH") // CASH, CARD, OTHER
   receiptNumber   String?       // e.g., "RCP-00001"
+  // Order status for customer ordering flow
+  status          String        @default("COMPLETED") // PENDING, ACCEPTED, PREPARING, READY, COMPLETED, CANCELLED
+  customerNote    String?       // "no ice", "extra shot", etc.
+  orderedBy       String        @default("STAFF") // STAFF or CUSTOMER
+  orderGroupId    String?       // UUID grouping items from one customer cart
   createdAt       DateTime      @default(now())
+  feedbacks       ItemFeedback[]
 
   @@index([createdAt])
+  @@index([orderGroupId])
+  @@index([status])
 }
 
 // ─── EXPENSES ───
@@ -324,6 +339,24 @@ model BackupLog {
 }
 
 // ─── SUBSCRIPTION PLANS ───
+
+// ─── FEEDBACK ───
+
+model ItemFeedback {
+  id            Int           @id @default(autoincrement())
+  baristaOrderId Int?
+  baristaOrder  BaristaOrder? @relation(fields: [baristaOrderId], references: [id], onDelete: SetNull)
+  menuItemId    Int?
+  menuItem      MenuItem?     @relation(fields: [menuItemId], references: [id], onDelete: SetNull)
+  studentId     Int?
+  student       Student?      @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  rating        Int           // 1-5 stars
+  comment       String?
+  createdAt     DateTime      @default(now())
+
+  @@index([menuItemId])
+  @@index([studentId])
+}
 
 model SubscriptionPlan {
   id            Int            @id @default(autoincrement())

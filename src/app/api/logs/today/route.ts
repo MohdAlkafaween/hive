@@ -5,13 +5,17 @@ import { isValidDateString } from '@/lib/sanitize'
 import { autoExpireSubscriptions } from '@/lib/autoExpire'
 import { todayString } from '@/lib/subscriptionLogic'
 import { autoCheckoutExpired, getExpiringCheckIns } from '@/lib/autoCheckout'
+import { checkStaffRateLimit } from '@/lib/rateLimit'
 
 const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000
 
 export async function GET(req: NextRequest) {
   try {
-    const session = await requireAuth('ADMIN', 'MANAGER', 'STAFF')
+    const session = await requireAuth('ADMIN', 'MANAGER')
     if (session instanceof Response) return session
+
+    const rl = checkStaffRateLimit(session.userId as number, 'read')
+    if (rl.limited) return Response.json({ error: 'Rate limit exceeded' }, { status: 429 })
 
     // Auto-expire stale subscriptions on dashboard load
     await autoExpireSubscriptions().catch(() => {})
@@ -27,7 +31,8 @@ export async function GET(req: NextRequest) {
         where: { date: dateParam },
         orderBy: { checkInTime: 'desc' },
         include: {
-          student: true,
+          // SECURITY (D1): feed only needs display fields, never credentials/PII extras
+          student: { select: { id: true, studentNumber: true, fullName: true, phone: true, major: true, photoUrl: true } },
           processedByUser: { select: { name: true, email: true } },
         },
       })
@@ -50,9 +55,17 @@ export async function GET(req: NextRequest) {
         ],
       },
       orderBy: { checkInTime: 'desc' },
+      take: 2000,
       include: {
+        // SECURITY (D1): feed only needs display fields + active sub, never credentials/PII extras
         student: {
-          include: {
+          select: {
+            id: true,
+            studentNumber: true,
+            fullName: true,
+            phone: true,
+            major: true,
+            photoUrl: true,
             subscriptions: {
               where: { isActive: true },
               orderBy: { createdAt: 'desc' },

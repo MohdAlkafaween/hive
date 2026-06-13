@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { verifyAuth, encrypt } from '@/lib/auth'
+import { STAFF_COOKIE_NAME, STAFF_COOKIE_OPTIONS, getClearCookieOptions } from '@/lib/cookieConfig'
 
 /**
  * POST /api/auth/refresh-session
@@ -14,14 +15,25 @@ export async function POST() {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
   }
 
-  const user = await prisma.user.findUnique({
-    where: { id: session.userId as number },
-    select: { id: true, email: true, role: true, permissions: true, isActive: true },
-  })
+  // DB error (SQLITE_BUSY, etc.) — return 503, NOT 500/401, so the client
+  // retries instead of logging the user out (same pattern as authGuard.ts)
+  let user
+  try {
+    user = await prisma.user.findUnique({
+      where: { id: session.userId as number },
+      select: { id: true, email: true, role: true, permissions: true, isActive: true },
+    })
+  } catch (error) {
+    console.error('[refresh-session] DB error:', error instanceof Error ? error.message : error)
+    return NextResponse.json(
+      { error: 'Service temporarily unavailable' },
+      { status: 503, headers: { 'Retry-After': '2' } }
+    )
+  }
 
   if (!user || !user.isActive) {
     const res = NextResponse.json({ error: 'Account disabled' }, { status: 403 })
-    res.cookies.set('session', '', { httpOnly: true, expires: new Date(0), path: '/' })
+    res.cookies.set(STAFF_COOKIE_NAME, '', getClearCookieOptions())
     return res
   }
 
@@ -34,13 +46,7 @@ export async function POST() {
   })
 
   const res = NextResponse.json({ refreshed: true })
-  res.cookies.set('session', sessionToken, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
-    path: '/',
-    maxAge: 60 * 60 * 8,
-  })
+  res.cookies.set(STAFF_COOKIE_NAME, sessionToken, STAFF_COOKIE_OPTIONS)
 
   return res
 }

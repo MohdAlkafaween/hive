@@ -21,8 +21,10 @@ interface CheckInLog {
   checkInTime: string
   checkOutTime: string | null
   date: string
+  method: string | null
   studentName: string
-  student: { id: number; fullName: string; phone: string; major: string | null } | null
+  student: { id: number; fullName: string; phone: string; major: string | null; subscriptions?: { planType: string }[] } | null
+  processedByUser: { name: string; email: string } | null
 }
 interface BaristaLog {
   id: number
@@ -210,7 +212,7 @@ export default function LogsPage() {
     <div className="flex flex-col gap-6 max-w-6xl mx-auto w-full">
       {/* Header */}
       <motion.div
-        className="flex items-center justify-between"
+        className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3"
         initial={{ opacity: 0, y: -12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
@@ -423,13 +425,26 @@ export default function LogsPage() {
                         label="Excel"
                         fileName={`hive-logs-${selectedDate}`}
                         sheetName="Check-In Logs"
-                        fetchData={async () => checkInLogs.map(l => ({
-                          Name: l.student?.fullName || l.studentName || 'Deleted',
-                          Phone: l.student?.phone || '',
-                          'Check-In': new Date(l.checkInTime).toLocaleTimeString('en-JO', { hour: '2-digit', minute: '2-digit' }),
-                          'Check-Out': l.checkOutTime ? new Date(l.checkOutTime).toLocaleTimeString('en-JO', { hour: '2-digit', minute: '2-digit' }) : 'N/A',
-                          Date: l.date,
-                        }))}
+                        fetchData={async () => checkInLogs.map(l => {
+                          const inT = new Date(l.checkInTime).getTime()
+                          const outT = l.checkOutTime ? new Date(l.checkOutTime).getTime() : null
+                          let duration = 'Still In'
+                          if (outT) {
+                            const m = Math.round((outT - inT) / 60000)
+                            duration = `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}`
+                          }
+                          return {
+                            Name: l.student?.fullName || l.studentName || 'Deleted',
+                            Phone: l.student?.phone || '',
+                            'Check-In': new Date(l.checkInTime).toLocaleTimeString('en-JO', { hour: '2-digit', minute: '2-digit' }),
+                            'Check-Out': l.checkOutTime ? new Date(l.checkOutTime).toLocaleTimeString('en-JO', { hour: '2-digit', minute: '2-digit' }) : '-',
+                            Date: l.date,
+                            Duration: duration,
+                            Method: l.method || 'MANUAL',
+                            Staff: l.processedByUser?.name || '-',
+                            'Subscription Type': l.student?.subscriptions?.[0]?.planType || '-',
+                          }
+                        })}
                       />
                     )}
                   </div>

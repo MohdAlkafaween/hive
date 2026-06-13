@@ -1,5 +1,6 @@
 import prisma from '@/lib/prisma'
 import { requireAuth } from '@/lib/authGuard'
+import { checkStaffRateLimit } from '@/lib/rateLimit'
 
 // GET all users (ADMIN only) — for admin panel
 // Includes last login time and total login count from audit logs
@@ -7,6 +8,9 @@ export async function GET() {
   try {
     const session = await requireAuth('ADMIN', 'MANAGER')
     if (session instanceof Response) return session
+
+    const rl = checkStaffRateLimit(session.userId as number, 'read')
+    if (rl.limited) return Response.json({ error: 'Rate limit exceeded' }, { status: 429 })
 
     const users = await prisma.user.findMany({
       select: {
@@ -34,6 +38,7 @@ export async function GET() {
         },
       },
       orderBy: { createdAt: 'desc' },
+      take: 500,
     })
 
     // Flatten the response

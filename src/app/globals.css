@@ -49,6 +49,34 @@ html, body {
   color: var(--color-hive-text);
   font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+
+/* Better touch targets on mobile */
+@media (max-width: 768px) {
+  button, a, [role="button"] {
+    min-height: 44px;
+  }
+  /* Exclude tiny inline icon buttons from min-height */
+  button.inline-icon-btn {
+    min-height: unset;
+  }
+}
+
+/* ─── Print Styles ─── */
+/* Hide navigation and app chrome when printing from any page */
+@media print {
+  nav, header, footer, aside,
+  .no-print,
+  [data-sidebar],
+  [data-topnav] {
+    display: none !important;
+  }
+  body {
+    background: white !important;
+    color: black !important;
+  }
 }
 
 /* Scrollbar styling */

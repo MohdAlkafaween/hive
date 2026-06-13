@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { todayString } from '@/lib/subscriptionLogic'
-import { Loader2, Ticket, CheckCircle2, XCircle, AlertTriangle, LogIn } from 'lucide-react'
+import { Loader2, Ticket, CheckCircle2, XCircle, AlertTriangle, LogIn, Printer } from 'lucide-react'
 import { PLAN_DEFAULTS, PlanType } from '@/lib/subscriptionLogic'
 import type { ReceiptData } from '@/components/dashboard/ReceiptModal'
 import { useI18n } from '@/lib/i18n'
@@ -77,7 +77,7 @@ export function RenewModal({ open, onClose, studentId, studentName, onRenewed }:
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         if (!data) return
-        const activeSub = data.subscriptions?.find((s: any) => s.isActive && new Date(s.expiryDate) > new Date())
+        const activeSub = data.subscriptions?.find((s: { isActive: boolean; expiryDate: string }) => s.isActive && new Date(s.expiryDate) > new Date())
         if (activeSub) {
           const daysLeft = Math.max(0, Math.ceil((new Date(activeSub.expiryDate).getTime() - Date.now()) / 86400000))
           const entriesLeft = activeSub.totalVisitsAllowed === -1 ? null : Math.max(0, activeSub.totalVisitsAllowed - activeSub.visitsUsed)
@@ -256,6 +256,7 @@ export function RenewModal({ open, onClose, studentId, studentName, onRenewed }:
         discount: totalDiscount,
         expiryDate: expiry.toISOString(),
         receiptNumber: subData.receiptNumber || undefined,
+        transactionId: subData.transaction?.id || undefined,
       })
       setSuccess(true)
     } finally {
@@ -330,6 +331,21 @@ export function RenewModal({ open, onClose, studentId, studentName, onRenewed }:
             >
               {checkingIn ? <Loader2 size={18} className="animate-spin" /> : <LogIn size={18} />}
               {checkingIn ? t('common.loading') : t('renew.checkInNow')}
+            </button>
+
+            <button
+              onClick={() => {
+                if (pendingReceipt?.transactionId) {
+                  window.open(`/subscription/receipt/${pendingReceipt.transactionId}`, '_blank')
+                } else if (pendingReceipt?.receiptNumber) {
+                  window.open(`/barista/receipt/${pendingReceipt.receiptNumber}`, '_blank')
+                }
+              }}
+              disabled={!pendingReceipt?.transactionId && !pendingReceipt?.receiptNumber}
+              className="w-full flex items-center justify-center gap-2.5 px-5 py-3 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 text-white/60 hover:text-white font-bold text-sm transition-all duration-200 active:scale-[0.98] disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              <Printer size={16} />
+              {t('receipt.print')}
             </button>
 
             <button

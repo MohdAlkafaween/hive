@@ -1,6 +1,7 @@
 import prisma from '@/lib/prisma'
 import { requireAuth } from '@/lib/authGuard'
 import { isValidId } from '@/lib/sanitize'
+import { checkStaffRateLimit } from '@/lib/rateLimit'
 
 // GET barista orders for a specific student
 export async function GET(
@@ -10,6 +11,9 @@ export async function GET(
   try {
     const session = await requireAuth('ADMIN', 'MANAGER', 'STAFF')
     if (session instanceof Response) return session
+
+    const rl = checkStaffRateLimit(session.userId as number, 'read')
+    if (rl.limited) return Response.json({ error: 'Rate limit exceeded' }, { status: 429 })
 
     const { id } = await params
     if (!isValidId(id)) {

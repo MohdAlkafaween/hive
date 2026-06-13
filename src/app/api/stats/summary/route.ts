@@ -1,25 +1,30 @@
 import prisma from '@/lib/prisma'
 import { requireAuth } from '@/lib/authGuard'
 import { todayString } from '@/lib/subscriptionLogic'
+import { checkStaffRateLimit } from '@/lib/rateLimit'
 
-// GET daily summary — admin only
+// GET daily summary
 export async function GET() {
   try {
-    const session = await requireAuth('ADMIN')
+    const session = await requireAuth('ADMIN', 'MANAGER')
     if (session instanceof Response) return session
+
+    const rl = checkStaffRateLimit(session.userId as number, 'read')
+    if (rl.limited) return Response.json({ error: 'Rate limit exceeded' }, { status: 429 })
 
     const today = todayString()
     const start = new Date(`${today}T00:00:00`)
     const end   = new Date(`${today}T23:59:59.999`)
 
     const [logs, transactions, newStudents, activeSubscriptions, baristaOrders] = await Promise.all([
-      prisma.log.findMany({ where: { date: today }, include: { student: { select: { fullName: true } } } }),
-      prisma.transaction.findMany({ where: { createdAt: { gte: start, lte: end } } }),
+      prisma.log.findMany({ where: { date: today }, include: { student: { select: { fullName: true } } }, take: 2000 }),
+      prisma.transaction.findMany({ where: { createdAt: { gte: start, lte: end } }, take: 2000 }),
       prisma.student.count({ where: { createdAt: { gte: start, lte: end } } }),
       prisma.subscription.count({ where: { isActive: true } }),
       prisma.baristaOrder.findMany({
         where: { createdAt: { gte: start, lte: end } },
         include: { menuItem: { select: { name: true } } },
+        take: 5000,
       }),
     ])
 

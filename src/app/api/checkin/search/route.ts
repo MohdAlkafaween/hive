@@ -3,18 +3,17 @@ import prisma from '@/lib/prisma'
 import { sanitizeString } from '@/lib/sanitize'
 import { checkRateLimit, getClientIp } from '@/lib/rateLimit'
 
-/**
- * Kiosk search endpoint — finds students by name.
- * Rate-limited to prevent enumeration attacks.
- * Returns minimal data only (no phone, no major, no sensitive fields).
- * Note: This endpoint requires auth since Fix #7 (removed from public paths).
- */
 export async function GET(req: NextRequest) {
   try {
     const ip = getClientIp(req)
-    const limit = checkRateLimit(`kiosk-search:${ip}`, 15, 60 * 1000) // 15 searches/min (reduced from 60)
+    const limit = checkRateLimit(`kiosk-search:${ip}`, 15, 60 * 1000)
     if (limit.limited) {
       return Response.json({ error: 'Too many requests' }, { status: 429 })
+    }
+
+    const kioskSetting = await prisma.appSetting.findUnique({ where: { key: 'kioskEnabled' } })
+    if (kioskSetting?.value !== 'true') {
+      return Response.json({ error: 'Kiosk mode is disabled' }, { status: 403 })
     }
 
     const rawQ = req.nextUrl.searchParams.get('q') ?? ''

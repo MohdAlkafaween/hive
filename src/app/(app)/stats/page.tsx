@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { BarChart3, TrendingUp, Users, Minus, ChevronDown, ChevronUp, Loader2, Calendar as CalendarIcon, DollarSign, Activity, Trash2, Lock, FileText, Coffee, RotateCcw, Ban, X } from 'lucide-react'
 import { useToast } from '@/components/ui/Toast'
 import { ExcelExport } from '@/components/stats/ExcelExport'
+import { DailyReportExport } from '@/components/stats/DailyReportExport'
 import { todayString } from '@/lib/subscriptionLogic'
 import { useI18n } from '@/lib/i18n'
 import { PageTransition } from '@/components/animations/PageTransition'
@@ -85,7 +86,7 @@ export default function StatsPage() {
   const [voidReason, setVoidReason] = useState('')
   const [voiding, setVoiding] = useState(false)
   const [monthlyReport, setMonthlyReport] = useState<any>(null)
-  const [reportMonth, setReportMonth] = useState(new Date().toISOString().slice(0, 7))
+  const [reportMonth, setReportMonth] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` })
   const [reportLoading, setReportLoading] = useState(false)
   const [showReport, setShowReport] = useState(false)
 
@@ -154,9 +155,9 @@ export default function StatsPage() {
 
   return (
     <PageTransition>
-    <div className="flex flex-col h-full p-8 gap-8 relative overflow-auto custom-scrollbar">
+    <div className="flex flex-col h-full p-2 md:p-8 gap-4 md:gap-8 relative overflow-auto custom-scrollbar">
       <motion.header
-        className="flex items-center justify-between pt-2"
+        className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 pt-2"
         initial={{ opacity: 0, y: -12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
@@ -170,12 +171,12 @@ export default function StatsPage() {
             >
               <BarChart3 size={28} className="text-black" strokeWidth={2} />
             </motion.div>
-            <h1 className="text-4xl font-black tracking-[0.2em] text-white uppercase">{t('stats.title')}</h1>
+            <h1 className="text-2xl md:text-4xl font-black tracking-[0.2em] text-white uppercase">{t('stats.title')}</h1>
           </div>
           <p className="text-xs font-bold text-white/30 tracking-widest uppercase ml-1">{t('stats.financialAttendance')}</p>
         </div>
 
-        <div className="flex items-center gap-4 glass-panel p-2 rounded-2xl">
+        <div className="flex items-center gap-2 md:gap-4 glass-panel p-2 rounded-2xl flex-wrap">
           <div className="relative flex items-center">
             <CalendarIcon size={16} className="absolute left-3 text-[#F5C518] pointer-events-none" />
             <input
@@ -186,8 +187,9 @@ export default function StatsPage() {
               style={{ colorScheme: 'dark' }}
             />
           </div>
-          <div className="pr-2">
+          <div className="pr-2 flex items-center gap-2">
             <ExcelExport date={date} />
+            {isAdminOrManager && <DailyReportExport date={date} />}
           </div>
         </div>
       </motion.header>
@@ -198,7 +200,7 @@ export default function StatsPage() {
         <>
           {/* Glance Metrics */}
           <motion.div
-            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6"
+            className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6"
             initial="hidden"
             animate="show"
             variants={{ hidden: {}, show: { transition: { staggerChildren: 0.1 } } }}
@@ -431,7 +433,7 @@ export default function StatsPage() {
                             <div key={exp.id} className="flex items-center justify-between p-2.5 rounded-lg bg-red-500/5 border border-red-500/10">
                               <div className="flex-1 min-w-0">
                                 <span className="text-sm text-white/70 font-bold">{exp.description}</span>
-                                {exp.category && <span className="text-[10px] text-white/20 ms-2 px-1.5 py-0.5 rounded bg-white/5">{t(`barista.expenseCategories.${exp.category.toLowerCase()}` as any) || exp.category}</span>}
+                                {exp.category && <span className="text-[10px] text-white/20 ms-2 px-1.5 py-0.5 rounded bg-white/5">{(t as (key: string) => string)(`barista.expenseCategories.${exp.category.toLowerCase()}`) || exp.category}</span>}
                                 <span className="text-[10px] text-white/15 ms-2">{exp.addedByName}</span>
                               </div>
                               <span className="text-red-400 font-bold text-sm flex-shrink-0">-{exp.amount.toFixed(2)} JD</span>
@@ -673,17 +675,17 @@ function MetricCard({ icon, label, value, sub, accent, glow }: {
   return (
     <motion.div
       variants={{ hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.22, 1, 0.36, 1] } } }}
-      className="hive-card metric-glow !rounded-2xl !p-6 group"
+      className="hive-card metric-glow !rounded-2xl !p-4 md:!p-6 group"
     >
       <div className={`absolute -right-10 -top-10 w-32 h-32 rounded-full blur-3xl transition-opacity opacity-30 group-hover:opacity-60 ${glow}`} />
       <div className="relative z-10">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="p-3 rounded-xl" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>{icon}</div>
-          <p className="text-[11px] font-bold text-white/30 uppercase tracking-widest">{label}</p>
+        <div className="flex items-center gap-2 md:gap-3 mb-3 md:mb-4">
+          <div className="p-2 md:p-3 rounded-xl shrink-0" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>{icon}</div>
+          <p className="text-[10px] md:text-[11px] font-bold text-white/30 uppercase tracking-widest">{label}</p>
         </div>
         <div>
-          <p className={`text-4xl font-black tracking-tight ${accent}`}>{value}</p>
-          <p className="text-[11px] font-bold text-white/20 uppercase tracking-wider mt-2">{sub}</p>
+          <p className={`text-2xl md:text-4xl font-black tracking-tight ${accent}`}>{value}</p>
+          <p className="text-[10px] md:text-[11px] font-bold text-white/20 uppercase tracking-wider mt-1 md:mt-2">{sub}</p>
         </div>
       </div>
     </motion.div>

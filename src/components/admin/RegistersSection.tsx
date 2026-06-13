@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { Loader2, Banknote, ChevronDown, ChevronUp } from 'lucide-react'
+import { Loader2, Banknote, ChevronDown, ChevronUp, Download } from 'lucide-react'
 import { useI18n } from '@/lib/i18n'
 
 interface Register {
@@ -23,6 +23,7 @@ export function RegistersSection() {
   const [registers, setRegisters] = useState<Register[]>([])
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState<number | null>(null)
+  const [exporting, setExporting] = useState(false)
 
   useEffect(() => {
     fetch('/api/cash-register')
@@ -31,10 +32,59 @@ export function RegistersSection() {
       .finally(() => setLoading(false))
   }, [])
 
+  const handleExport = async () => {
+    if (registers.length === 0) return
+    setExporting(true)
+    try {
+      const XLSX = await import('xlsx')
+      const rows = registers.map((reg, i) => ({
+        'Register #': registers.length - i,
+        'Opened By': reg.userName,
+        'Opening Time': new Date(reg.createdAt).toLocaleTimeString('en-JO', { hour: '2-digit', minute: '2-digit', hour12: false }),
+        'Closing Time': reg.status === 'CLOSED' ? new Date(reg.updatedAt).toLocaleTimeString('en-JO', { hour: '2-digit', minute: '2-digit', hour12: false }) : 'Still Open',
+        'Date': new Date(reg.createdAt).toLocaleDateString('en-JO'),
+        'Opening Cash': reg.openingCash,
+        'Cash Sales': reg.cashSales,
+        'Card Sales': reg.cardSales,
+        'Total Sales': Math.round((reg.cashSales + reg.cardSales) * 100) / 100,
+        'Expected Cash': reg.expectedCash ?? reg.openingCash + reg.cashSales,
+        'Closing Cash': reg.closingCash ?? '-',
+        'Difference': reg.cashDiscrepancy ?? '-',
+        'Status': reg.status,
+      }))
+      const ws = XLSX.utils.json_to_sheet(rows)
+      ws['!cols'] = [
+        { wch: 10 }, { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 12 },
+        { wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 12 },
+        { wch: 12 }, { wch: 10 }, { wch: 8 },
+      ]
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, 'Cash Registers')
+      const d = new Date()
+      const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+      XLSX.writeFile(wb, `HIVE-Registers-${today}.xlsx`)
+    } finally {
+      setExporting(false)
+    }
+  }
+
   if (loading) return <div className="flex justify-center py-8"><Loader2 className="animate-spin text-white/30" /></div>
 
   return (
     <div className="space-y-2">
+      {registers.length > 0 && (
+        <div className="flex justify-end mb-2">
+          <button
+            onClick={handleExport}
+            disabled={exporting}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-green-500/10 border border-green-500/20 text-green-400 hover:bg-green-500/20 hover:border-green-500/30 text-xs font-bold transition-all disabled:opacity-40"
+          >
+            {exporting ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+            {exporting ? t('export.generating') : t('export.registers')}
+          </button>
+        </div>
+      )}
+
       {registers.length === 0 ? (
         <p className="text-center text-white/25 text-sm py-8">{t('register.noRegisters')}</p>
       ) : (

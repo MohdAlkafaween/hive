@@ -3,11 +3,16 @@ import prisma from '@/lib/prisma'
 import { requireAuth } from '@/lib/authGuard'
 import { computeExpiryDate, PLAN_DEFAULTS, PlanType } from '@/lib/subscriptionLogic'
 import { isValidId } from '@/lib/sanitize'
+import { generateReceiptNumber } from '@/lib/receiptNumber'
+import { checkStaffRateLimit } from '@/lib/rateLimit'
 
 export async function POST(req: NextRequest) {
   try {
-    const session = await requireAuth('ADMIN', 'STAFF')
+    const session = await requireAuth('ADMIN', 'MANAGER', 'STAFF')
     if (session instanceof Response) return session
+
+    const rl = checkStaffRateLimit(session.userId as number, 'write')
+    if (rl.limited) return Response.json({ error: 'Rate limit exceeded' }, { status: 429 })
 
     const body = await req.json().catch(() => null)
     if (!body) return Response.json({ error: 'Invalid request body' }, { status: 400 })
@@ -31,7 +36,9 @@ export async function POST(req: NextRequest) {
         plan = dbPlan.name as PlanType
         defaults = {
           price: dbPlan.price,
-          totalVisitsAllowed: dbPlan.totalVisits === -1 ? 999 : dbPlan.totalVisits,
+          // -1 means unlimited and must pass through unchanged (check-in skips entry
+          // deduction for -1). Fall back to a sane default only for missing/zero values.
+          totalVisitsAllowed: dbPlan.totalVisits === -1 ? -1 : (dbPlan.totalVisits || PLAN_DEFAULTS[plan]?.totalVisitsAllowed || 30),
           durationDays: dbPlan.durationDays,
         }
       }
@@ -78,15 +85,7 @@ export async function POST(req: NextRequest) {
         data: { isActive: false, windowStart: null },
       })
 
-      // Generate receipt number atomically
-      const receiptSetting = await tx.appSetting.findUnique({ where: { key: 'nextReceiptNumber' } })
-      const nextNum = receiptSetting ? parseInt(receiptSetting.value) : 1
-      const receiptNumber = `RCP-${String(nextNum).padStart(5, '0')}`
-      await tx.appSetting.upsert({
-        where: { key: 'nextReceiptNumber' },
-        create: { key: 'nextReceiptNumber', value: String(nextNum + 1) },
-        update: { value: String(nextNum + 1) },
-      })
+      const receiptNumber = await generateReceiptNumber(tx)
 
       const subscription = await tx.subscription.create({
         data: {
@@ -129,9 +128,9 @@ export async function POST(req: NextRequest) {
       activeSessionWarning: !!openLog,
       activeSessionMessage: openLog ? 'Student is currently checked in. Their session will continue until auto-checkout.' : undefined,
     }, { status: 201 })
-  } catch (e: any) {
+  } catch (e) {
     console.error('[POST /api/subscriptions]', e)
-    if (e?.code === 'P2003') return Response.json({ error: 'Student not found' }, { status: 404 })
+    if (e instanceof Error && 'code' in e && (e as { code: string }).code === 'P2003') return Response.json({ error: 'Student not found' }, { status: 404 })
     return Response.json({ error: 'Failed to issue subscription' }, { status: 500 })
   }
 }

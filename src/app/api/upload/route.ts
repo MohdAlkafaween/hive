@@ -39,7 +39,7 @@ function validateMagicBytes(bytes: Uint8Array, mime: string): boolean {
 
 export async function POST(req: NextRequest) {
   try {
-    const session = await requireAuth('ADMIN', 'STAFF')
+    const session = await requireAuth('ADMIN', 'MANAGER', 'STAFF')
     if (session instanceof Response) return session
 
     // Rate limit: 20 uploads per minute per IP

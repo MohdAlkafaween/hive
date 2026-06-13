@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
-import { CreditCard, Loader2, User, Phone, BookOpen, Scan, CheckCircle2, ExternalLink, Wallet, ChevronDown, Mail, GraduationCap, Heart, UserCircle } from 'lucide-react'
+import { CreditCard, Loader2, User, Phone, BookOpen, Scan, CheckCircle2, ExternalLink, Wallet, ChevronDown, Mail, GraduationCap, Heart, UserCircle, KeyRound, Eye, EyeOff } from 'lucide-react'
 import { useHiveStore } from '@/lib/store'
 import { useI18n } from '@/lib/i18n'
 import { RenewModal } from '@/components/directory/RenewModal'
@@ -43,6 +43,12 @@ export function AddStudentModal({ onCreated }: AddStudentModalProps) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
+  // Customer login password (optional)
+  const [enableLogin, setEnableLogin] = useState(false)
+  const [loginPassword, setLoginPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+
   const [createdStudent, setCreatedStudent] = useState<CreatedStudent | null>(null)
   const [showRenew, setShowRenew] = useState(false)
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null)
@@ -74,12 +80,17 @@ export function AddStudentModal({ onCreated }: AddStudentModalProps) {
     setEmergencyPhone(''); setReferralSource(''); setDateOfBirth(''); setShowMore(false)
     setListeningRfid(false); setError(''); setStep('form')
     setCreatedStudent(null); setShowRenew(false); setReceiptData(null)
+    setEnableLogin(false); setLoginPassword(''); setConfirmPassword(''); setShowPassword(false)
   }
 
   const handleClose = () => { reset(); setAddStudentOpen(false) }
 
   const handleSubmit = async () => {
     if (!fullName.trim() || !phone.trim()) { setError(t('addStudent.namePhoneRequired')); return }
+    if (enableLogin) {
+      if (!loginPassword || loginPassword.length < 6) { setError(t('addStudent.passwordMinChars')); return }
+      if (loginPassword !== confirmPassword) { setError(t('customerAuth.passwordsMismatch')); return }
+    }
     setSaving(true); setError('')
     try {
       const res = await fetch('/api/students', {
@@ -90,6 +101,7 @@ export function AddStudentModal({ onCreated }: AddStudentModalProps) {
           email: email || null, university: university || null, gender: gender || null,
           emergencyContact: emergencyContact || null, emergencyPhone: emergencyPhone || null,
           referralSource: referralSource || null, dateOfBirth: dateOfBirth || null,
+          ...(enableLogin && loginPassword ? { password: loginPassword } : {}),
         }),
       })
       const data = await res.json()
@@ -158,7 +170,7 @@ export function AddStudentModal({ onCreated }: AddStudentModalProps) {
               className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-sm text-white outline-none focus:border-[#F5C518] focus:shadow-[0_0_0_1px_#F5C518] placeholder:text-white/20 transition-all" autoFocus />
           </Field>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Field label={`${t('addStudent.phone')} *`} icon={<Phone size={16} />}>
               <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder={t('addStudent.phonePlaceholder')}
                 className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-sm text-white outline-none focus:border-[#F5C518] focus:shadow-[0_0_0_1px_#F5C518] placeholder:text-white/20 transition-all" type="tel" />
@@ -194,6 +206,51 @@ export function AddStudentModal({ onCreated }: AddStudentModalProps) {
             </div>
           </Field>
 
+          {/* Customer Login (optional) */}
+          <div className="space-y-3 p-4 rounded-xl" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+            <label className="flex items-center gap-3 cursor-pointer">
+              <div className={`relative w-10 h-5 rounded-full transition-all ${enableLogin ? 'bg-[#F5C518]' : 'bg-white/10'}`}
+                onClick={() => setEnableLogin(!enableLogin)}>
+                <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${enableLogin ? 'left-5' : 'left-0.5'}`} />
+              </div>
+              <div className="flex items-center gap-1.5">
+                <KeyRound size={14} className={enableLogin ? 'text-[#F5C518]' : 'text-white/25'} />
+                <span className={`text-xs font-bold ${enableLogin ? 'text-[#F5C518]' : 'text-white/40'}`}>
+                  {t('addStudent.enableCustomerLogin')}
+                </span>
+              </div>
+            </label>
+            {enableLogin && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
+                <Field label={`${t('addStudent.setLoginPassword')} *`} icon={<KeyRound size={16} />}>
+                  <div className="relative">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      value={loginPassword}
+                      onChange={(e) => setLoginPassword(e.target.value)}
+                      placeholder={t('profile.minChars')}
+                      minLength={6}
+                      className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 pr-10 text-sm text-white outline-none focus:border-[#F5C518] focus:shadow-[0_0_0_1px_#F5C518] placeholder:text-white/20 transition-all"
+                    />
+                    <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-3 text-white/30 hover:text-white/50">
+                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                </Field>
+                <Field label={`${t('customerAuth.confirmPassword')} *`} icon={<KeyRound size={16} />}>
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder={t('profile.reenterPassword')}
+                    minLength={6}
+                    className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-sm text-white outline-none focus:border-[#F5C518] focus:shadow-[0_0_0_1px_#F5C518] placeholder:text-white/20 transition-all"
+                  />
+                </Field>
+              </div>
+            )}
+          </div>
+
           {/* More Details (collapsible) */}
           <button
             type="button"
@@ -206,7 +263,7 @@ export function AddStudentModal({ onCreated }: AddStudentModalProps) {
 
           {showMore && (
             <div className="space-y-4 animate-in slide-in-from-top-2">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Field label={t('addStudent.email')} icon={<Mail size={16} />}>
                   <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="email@example.com" type="email"
                     className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-sm text-white outline-none focus:border-[#F5C518] focus:shadow-[0_0_0_1px_#F5C518] placeholder:text-white/20 transition-all" />
@@ -217,7 +274,7 @@ export function AddStudentModal({ onCreated }: AddStudentModalProps) {
                 </Field>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Field label={t('addStudent.gender')} icon={<UserCircle size={16} />}>
                   <select value={gender} onChange={(e) => setGender(e.target.value)}
                     className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-sm text-white outline-none focus:border-[#F5C518] transition-all">
@@ -232,7 +289,7 @@ export function AddStudentModal({ onCreated }: AddStudentModalProps) {
                 </Field>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Field label={t('addStudent.emergencyContact')} icon={<Heart size={16} />}>
                   <input value={emergencyContact} onChange={(e) => setEmergencyContact(e.target.value)} placeholder={t('addStudent.emergencyContactPlaceholder')}
                     className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-sm text-white outline-none focus:border-[#F5C518] focus:shadow-[0_0_0_1px_#F5C518] placeholder:text-white/20 transition-all" />

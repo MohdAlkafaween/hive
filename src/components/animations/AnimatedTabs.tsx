@@ -16,14 +16,14 @@ interface AnimatedTabsProps {
 
 export function AnimatedTabs({ tabs, activeTab, onChange, className = '' }: AnimatedTabsProps) {
   return (
-    <div className={`flex gap-1 p-1 rounded-xl w-fit ${className}`}
+    <div className={`flex gap-1 p-1 rounded-xl w-fit max-w-full overflow-x-auto ${className}`}
       style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}
     >
       {tabs.map((tab) => (
         <button
           key={tab.id}
           onClick={() => onChange(tab.id)}
-          className="relative flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors duration-200"
+          className="relative flex items-center gap-2 px-3 md:px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors duration-200 shrink-0"
         >
           {activeTab === tab.id && (
             <motion.div

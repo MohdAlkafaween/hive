@@ -3,12 +3,15 @@ import prisma from '@/lib/prisma'
 import { requireAuth } from '@/lib/authGuard'
 import { isValidDateString } from '@/lib/sanitize'
 import { todayString } from '@/lib/subscriptionLogic'
+import { checkStaffRateLimit } from '@/lib/rateLimit'
 
 export async function GET(req: NextRequest) {
   try {
-    // Stats are ADMIN-only
-    const session = await requireAuth('ADMIN')
+    const session = await requireAuth('ADMIN', 'MANAGER')
     if (session instanceof Response) return session
+
+    const rl = checkStaffRateLimit(session.userId as number, 'read')
+    if (rl.limited) return Response.json({ error: 'Rate limit exceeded' }, { status: 429 })
 
     const dateParam = req.nextUrl.searchParams.get('date')
     const today = (dateParam && isValidDateString(dateParam)) ? dateParam : todayString()
@@ -19,12 +22,29 @@ export async function GET(req: NextRequest) {
     const [logs, transactions, baristaOrders, expenses] = await Promise.all([
       prisma.log.findMany({
         where: { date: today },
-        include: { student: { select: { fullName: true } } },
+        include: {
+          student: {
+            select: {
+              fullName: true,
+              phone: true,
+              subscriptions: {
+                where: { isActive: true },
+                orderBy: { createdAt: 'desc' },
+                take: 1,
+                select: { planType: true },
+              },
+            },
+          },
+          processedByUser: { select: { name: true } },
+        },
         orderBy: { checkInTime: 'asc' },
       }),
       prisma.transaction.findMany({
         where: { createdAt: { gte: start, lte: end } },
-        include: { student: { select: { fullName: true } } },
+        include: {
+          student: { select: { fullName: true } },
+          subscription: { select: { planType: true } },
+        },
         orderBy: { createdAt: 'asc' },
       }),
       prisma.baristaOrder.findMany({

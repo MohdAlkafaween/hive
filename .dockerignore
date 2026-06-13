@@ -1,0 +1,35 @@
+# Dependencies / build output (rebuilt inside the image)
+node_modules
+.next
+out
+src/generated
+
+# VCS / editor / agent files
+.git
+.gitignore
+.claude
+*.md
+
+# SECRETS — never bake env files into the image (passed via docker compose)
+.env
+.env.local
+.env*.local
+deploy/.env*
+
+# Local database + runtime data (lives on the volume in production)
+dev.db
+dev.db-wal
+dev.db-shm
+*.db
+*.db-wal
+*.db-shm
+backups/
+prisma/backups/
+prisma/hive.db
+public/uploads/
+
+# Misc
+pentest-results/
+coverage/
+npm-debug.log*
+.DS_Store

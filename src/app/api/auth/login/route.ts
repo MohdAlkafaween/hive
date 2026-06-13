@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { cookies } from 'next/headers'
 import prisma from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
 import { encrypt } from '@/lib/auth'
@@ -6,6 +7,7 @@ import { checkRateLimit, clearRateLimit, getClientIp } from '@/lib/rateLimit'
 import { isValidEmail } from '@/lib/sanitize'
 import { todayString } from '@/lib/subscriptionLogic'
 import { auditLog } from '@/lib/auditLog'
+import { STAFF_COOKIE_NAME, STAFF_COOKIE_OPTIONS } from '@/lib/cookieConfig'
 
 // Pre-computed valid bcrypt hash for timing-attack prevention
 // This is a real hash of a random string — ensures bcrypt.compare() takes the same time
@@ -108,19 +110,14 @@ export async function POST(req: Request) {
 
     const sessionToken = await encrypt({ userId: user.id, email: user.email, role: user.role, permissions: user.permissions || '[]' })
 
-    const res = NextResponse.json({
+    // Use next/headers cookies() — more reliable than res.cookies.set() in Next.js 15/16
+    const cookieStore = await cookies()
+    cookieStore.set(STAFF_COOKIE_NAME, sessionToken, STAFF_COOKIE_OPTIONS)
+
+    return NextResponse.json({
       message: 'Login successful',
       user: { email: user.email, role: user.role },
     })
-    res.cookies.set('session', sessionToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict', // Upgraded from 'lax' for CSRF protection
-      path: '/',
-      maxAge: 60 * 60 * 8, // 8 hours (one shift)
-    })
-
-    return res
   } catch {
     return NextResponse.json({ error: 'Login failed' }, { status: 500 })
   }

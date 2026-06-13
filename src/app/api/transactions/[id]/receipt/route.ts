@@ -1,12 +1,17 @@
 import prisma from '@/lib/prisma'
 import { requireAuth } from '@/lib/authGuard'
 import { isValidId } from '@/lib/sanitize'
+import { saveReceiptToFile } from '@/lib/receiptWriter'
+import { checkStaffRateLimit } from '@/lib/rateLimit'
 
 // GET subscription receipt by transaction ID — redirects to the unified receipt API
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await requireAuth('ADMIN', 'STAFF', 'MANAGER')
     if (session instanceof Response) return session
+
+    const rl = checkStaffRateLimit(session.userId as number, 'read')
+    if (rl.limited) return Response.json({ error: 'Rate limit exceeded' }, { status: 429 })
 
     const { id } = await params
     if (!isValidId(id)) return Response.json({ error: 'Invalid ID' }, { status: 400 })
@@ -65,6 +70,13 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       hasSubscription: true,
       hasBaristaOrders: linkedOrders.length > 0,
     }
+
+    saveReceiptToFile({
+      receiptNumber: receipt.receiptNumber,
+      type: 'subscription',
+      content: receipt,
+      date: new Date(),
+    }).catch(() => {})
 
     return Response.json(receipt)
   } catch {

@@ -2,12 +2,16 @@ import prisma from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
 import { requireAuth } from '@/lib/authGuard'
 import { isValidEmail, isStrongPassword } from '@/lib/sanitize'
+import { checkStaffRateLimit } from '@/lib/rateLimit'
 
 // FIX #2: Registration now requires ADMIN auth — no open registration
 export async function POST(req: Request) {
   try {
     const session = await requireAuth('ADMIN')
     if (session instanceof Response) return session
+
+    const rl = checkStaffRateLimit(session.userId as number, 'write')
+    if (rl.limited) return Response.json({ error: 'Rate limit exceeded' }, { status: 429 })
 
     const body = await req.json().catch(() => null)
     if (!body) return Response.json({ error: 'Invalid request body' }, { status: 400 })
@@ -28,7 +32,7 @@ export async function POST(req: Request) {
     }
 
     // Only ADMINs can create other ADMINs — prevents privilege escalation
-    const validRoles = ['STAFF', 'MANAGER', 'ADMIN']
+    const validRoles = ['STAFF', 'BARISTA', 'MANAGER', 'ADMIN']
     let userRole = validRoles.includes(role) ? role : 'STAFF'
     if (role === 'ADMIN' && (session.role as string) !== 'ADMIN') {
       return Response.json({ error: 'Only admins can create admin accounts' }, { status: 403 })
@@ -37,7 +41,7 @@ export async function POST(req: Request) {
     // Validate permissions for MANAGER role
     let permissions = '[]'
     if (userRole === 'MANAGER' && Array.isArray(body.permissions)) {
-      const validPages = ['/', '/directory', '/logs', '/stats', '/barista', '/admin']
+      const validPages = ['/', '/directory', '/logs', '/stats', '/barista', '/orders', '/feedback', '/admin']
       const filtered = body.permissions.filter((p: string) => validPages.includes(p))
       permissions = JSON.stringify(filtered)
     }

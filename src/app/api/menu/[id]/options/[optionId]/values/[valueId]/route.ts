@@ -1,11 +1,15 @@
 import prisma from '@/lib/prisma'
 import { requireAuth } from '@/lib/authGuard'
 import { isValidId } from '@/lib/sanitize'
+import { checkStaffRateLimit } from '@/lib/rateLimit'
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string; optionId: string; valueId: string }> }) {
   try {
     const session = await requireAuth('ADMIN', 'STAFF')
     if (session instanceof Response) return session
+
+    const rl = checkStaffRateLimit(session.userId as number, 'write')
+    if (rl.limited) return Response.json({ error: 'Rate limit exceeded' }, { status: 429 })
 
     const { valueId } = await params
     if (!isValidId(valueId)) return Response.json({ error: 'Invalid ID' }, { status: 400 })
@@ -32,6 +36,9 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   try {
     const session = await requireAuth('ADMIN', 'STAFF')
     if (session instanceof Response) return session
+
+    const rl = checkStaffRateLimit(session.userId as number, 'write')
+    if (rl.limited) return Response.json({ error: 'Rate limit exceeded' }, { status: 429 })
 
     const { valueId } = await params
     if (!isValidId(valueId)) return Response.json({ error: 'Invalid ID' }, { status: 400 })

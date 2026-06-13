@@ -2,11 +2,15 @@ import { NextRequest } from 'next/server'
 import prisma from '@/lib/prisma'
 import { requireAuth } from '@/lib/authGuard'
 import { sanitizeString, isValidId } from '@/lib/sanitize'
+import { checkStaffRateLimit } from '@/lib/rateLimit'
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await requireAuth('ADMIN')
     if (session instanceof Response) return session
+
+    const rl = checkStaffRateLimit(session.userId as number, 'write')
+    if (rl.limited) return Response.json({ error: 'Rate limit exceeded' }, { status: 429 })
 
     const { id } = await params
     if (!isValidId(id)) return Response.json({ error: 'Invalid plan ID' }, { status: 400 })
@@ -29,8 +33,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     })
 
     return Response.json(plan)
-  } catch (e: any) {
-    if (e?.code === 'P2025') return Response.json({ error: 'Plan not found' }, { status: 404 })
+  } catch (e) {
+    if (e instanceof Error && 'code' in e && (e as { code: string }).code === 'P2025') return Response.json({ error: 'Plan not found' }, { status: 404 })
     console.error('[PATCH /api/plans/[id]]', e)
     return Response.json({ error: 'Failed to update plan' }, { status: 500 })
   }
@@ -41,13 +45,16 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     const session = await requireAuth('ADMIN')
     if (session instanceof Response) return session
 
+    const rl = checkStaffRateLimit(session.userId as number, 'write')
+    if (rl.limited) return Response.json({ error: 'Rate limit exceeded' }, { status: 429 })
+
     const { id } = await params
     if (!isValidId(id)) return Response.json({ error: 'Invalid plan ID' }, { status: 400 })
 
     await prisma.subscriptionPlan.delete({ where: { id: Number(id) } })
     return Response.json({ success: true })
-  } catch (e: any) {
-    if (e?.code === 'P2025') return Response.json({ error: 'Plan not found' }, { status: 404 })
+  } catch (e) {
+    if (e instanceof Error && 'code' in e && (e as { code: string }).code === 'P2025') return Response.json({ error: 'Plan not found' }, { status: 404 })
     console.error('[DELETE /api/plans/[id]]', e)
     return Response.json({ error: 'Failed to delete plan' }, { status: 500 })
   }

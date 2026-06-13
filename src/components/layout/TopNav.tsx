@@ -60,9 +60,9 @@ export function TopNav() {
     >
       <div className="max-w-full flex items-center justify-between">
         {/* Left: Logo */}
-        <div className="flex items-center gap-2.5 group cursor-default">
-          <img src="/logo.png" alt="HIVE" className="w-11 h-11 object-contain transition-transform duration-500 group-hover:scale-110 drop-shadow-[0_0_8px_rgba(245,197,24,0.3)]" />
-          <span className="text-xl font-black tracking-tight text-white transition-colors duration-300">
+        <div className="flex items-center gap-2 md:gap-2.5 group cursor-default">
+          <img src="/logo.png" alt="HIVE" className="w-8 h-8 md:w-11 md:h-11 object-contain transition-transform duration-500 group-hover:scale-110 drop-shadow-[0_0_8px_rgba(245,197,24,0.3)]" />
+          <span className="text-lg md:text-xl font-black tracking-tight text-white transition-colors duration-300">
             HIVE<span className="hive-gradient-text">.</span>
           </span>
         </div>
@@ -121,7 +121,7 @@ export function TopNav() {
           <div className="flex items-center gap-2 ps-2 border-s border-white/10">
             {user ? (
               <div className="flex flex-col items-end animate-fade-in">
-                <span className="text-xs font-bold text-white/90">{user.email.split('@')[0]}</span>
+                <span className="text-xs font-bold text-white/90 max-w-[80px] md:max-w-none truncate">{user.email.split('@')[0]}</span>
                 <span className="text-[10px] font-bold text-[#F5C518] uppercase tracking-wider">{user.role.replace('_', ' ')}</span>
               </div>
             ) : (

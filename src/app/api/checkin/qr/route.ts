@@ -7,6 +7,7 @@ import { autoExpireSubscriptions } from '@/lib/autoExpire'
 import { autoCheckoutExpired } from '@/lib/autoCheckout'
 import { getCapacityInfo } from '@/lib/capacity'
 import { verifyAuth } from '@/lib/auth'
+import { safeStudentResponse } from '@/lib/safeStudent'
 
 const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000
 
@@ -27,9 +28,17 @@ export async function POST(req: NextRequest) {
     const token = sanitizeString(body.token)
     if (!token) return Response.json({ status: 'NOT_FOUND', reason: 'Invalid QR code.' }, { status: 400 })
 
+    // SECURITY: select only what the check-in logic and kiosk UI need.
+    // This is a public endpoint — never fetch password, qrToken, rfidUuid, or PII.
     const student = await prisma.student.findUnique({
       where: { qrToken: token },
-      include: {
+      select: {
+        id: true,
+        fullName: true,
+        studentNumber: true,
+        photoUrl: true,
+        status: true,
+        lifetimeCheckIns: true,
         subscriptions: {
           where: {
             OR: [
@@ -50,14 +59,14 @@ export async function POST(req: NextRequest) {
       return Response.json({
         status: student.status,
         reason: student.status === 'SUSPENDED' ? 'Account suspended. Please see the front desk.' : 'Access denied. Please see the front desk.',
-        student,
+        student: safeStudentResponse(student),
       }, { status: 403 })
     }
 
     const sub = student.subscriptions[0] ?? null
-    if (!sub) return Response.json({ status: 'EXPIRED', reason: 'No active subscription.', student })
+    if (!sub) return Response.json({ status: 'EXPIRED', reason: 'No active subscription.', student: safeStudentResponse(student) })
 
-    if (sub.isFrozen) return Response.json({ status: 'EXPIRED', reason: 'Subscription is frozen.', student })
+    if (sub.isFrozen) return Response.json({ status: 'EXPIRED', reason: 'Subscription is frozen.', student: safeStudentResponse(student) })
 
     // Check if this subscription has an active 24h window (even if deactivated by autoExpire)
     const now = new Date()
@@ -66,7 +75,7 @@ export async function POST(req: NextRequest) {
 
     // If subscription is deactivated AND no active window, block
     if (!sub.isActive && !hasActiveWindow) {
-      return Response.json({ status: 'EXPIRED', reason: 'Subscription has expired.', student })
+      return Response.json({ status: 'EXPIRED', reason: 'Subscription has expired.', student: safeStudentResponse(student) })
     }
 
     // If subscription is active, validate fully; skip if inactive but has active window
@@ -75,7 +84,7 @@ export async function POST(req: NextRequest) {
       if (!check.active) {
         if (!hasActiveWindow) {
           await prisma.subscription.update({ where: { id: sub.id }, data: { isActive: false } })
-          return Response.json({ status: 'EXPIRED', reason: check.reason, student })
+          return Response.json({ status: 'EXPIRED', reason: check.reason, student: safeStudentResponse(student) })
         }
         await prisma.subscription.update({ where: { id: sub.id }, data: { isActive: false } })
       }
@@ -90,7 +99,7 @@ export async function POST(req: NextRequest) {
       return Response.json({
         status: 'ALREADY_IN',
         reason: 'Student is already checked in.',
-        student, subscription: sub,
+        student: safeStudentResponse(student), subscription: sub,
         remainingVisits: sub.totalVisitsAllowed === -1 ? null : sub.totalVisitsAllowed - sub.visitsUsed,
         logId: existingActiveLog.id, alreadyCheckedInToday: true,
       })
@@ -102,7 +111,7 @@ export async function POST(req: NextRequest) {
       return Response.json({
         status: 'FULL',
         reason: `Venue is at full capacity (${capacity.maxCapacity}). Please try again later.`,
-        student,
+        student: safeStudentResponse(student),
         currentOccupancy: capacity.currentOccupancy,
         maxCapacity: capacity.maxCapacity,
       })
@@ -133,7 +142,7 @@ export async function POST(req: NextRequest) {
 
       if (result.duplicate) {
         return Response.json({
-          status: 'ALREADY_IN', student, subscription: sub,
+          status: 'ALREADY_IN', student: safeStudentResponse(student), subscription: sub,
           remainingVisits: sub.totalVisitsAllowed === -1 ? null : sub.totalVisitsAllowed - sub.visitsUsed,
           logId: result.logId, alreadyCheckedInToday: true,
         })
@@ -145,13 +154,13 @@ export async function POST(req: NextRequest) {
           userId: staffUserId,
           email: staffUserId ? '' : 'kiosk',
           role: staffUserId ? '' : 'KIOSK',
-          event: 'CHECKIN' as any,
+          event: 'CHECKIN',
           details: `Checked in student ${student.fullName} (ID: ${student.id}) via QR [window reuse]`,
         },
       }).catch(() => {})
 
       return Response.json({
-        status: 'OK', student, subscription: sub,
+        status: 'OK', student: safeStudentResponse(student), subscription: sub,
         remainingVisits: sub.totalVisitsAllowed === -1 ? null : sub.totalVisitsAllowed - sub.visitsUsed,
         logId: result.logId, windowReuse: true,
       })
@@ -160,7 +169,7 @@ export async function POST(req: NextRequest) {
     // OUTSIDE window: deduct 1 entry, start new 24h window
     if (sub.totalVisitsAllowed !== -1 && sub.visitsUsed >= sub.totalVisitsAllowed) {
       await prisma.subscription.update({ where: { id: sub.id }, data: { isActive: false } })
-      return Response.json({ status: 'EXPIRED', reason: 'All entries have been used.', student })
+      return Response.json({ status: 'EXPIRED', reason: 'All entries have been used.', student: safeStudentResponse(student) })
     }
 
     const result = await prisma.$transaction(async (tx) => {
@@ -200,7 +209,7 @@ export async function POST(req: NextRequest) {
 
     if (result.duplicate) {
       return Response.json({
-        status: 'ALREADY_IN', student, subscription: sub,
+        status: 'ALREADY_IN', student: safeStudentResponse(student), subscription: sub,
         remainingVisits: sub.totalVisitsAllowed === -1 ? null : sub.totalVisitsAllowed - sub.visitsUsed,
         logId: result.logId, alreadyCheckedInToday: true,
       })
@@ -214,13 +223,13 @@ export async function POST(req: NextRequest) {
         userId: staffUserId,
         email: staffUserId ? '' : 'kiosk',
         role: staffUserId ? '' : 'KIOSK',
-        event: 'CHECKIN' as any,
+        event: 'CHECKIN',
         details: `Checked in student ${student.fullName} (ID: ${student.id}) via QR [new window, entry deducted]`,
       },
     }).catch(() => {})
 
     return Response.json({
-      status: 'OK', student, subscription: updatedSub,
+      status: 'OK', student: safeStudentResponse(student), subscription: updatedSub,
       remainingVisits: updatedSub.totalVisitsAllowed === -1 ? null : updatedSub.totalVisitsAllowed - updatedSub.visitsUsed,
       logId: result.logId,
     })

@@ -1,7 +1,7 @@
 import prisma from '@/lib/prisma'
 import { requireAuth } from '@/lib/authGuard'
 import { todayString } from '@/lib/subscriptionLogic'
-import { getClientIp } from '@/lib/rateLimit'
+import { getClientIp , checkStaffRateLimit } from '@/lib/rateLimit'
 import { NextRequest } from 'next/server'
 
 // POST — auto-cleanup: delete all checked-out logs from previous days
@@ -11,6 +11,9 @@ export async function POST(req: NextRequest) {
   try {
     const session = await requireAuth('ADMIN')
     if (session instanceof Response) return session
+
+    const rl = checkStaffRateLimit(session.userId as number, 'write')
+    if (rl.limited) return Response.json({ error: 'Rate limit exceeded' }, { status: 429 })
 
     const dryRun = req.nextUrl.searchParams.get('dryRun') === 'true'
     const today = todayString()

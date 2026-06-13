@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import prisma from '@/lib/prisma'
 import { requireAuth } from '@/lib/authGuard'
 import { isValidId } from '@/lib/sanitize'
+import { checkStaffRateLimit } from '@/lib/rateLimit'
 
 // PATCH — toggle active / update promo code / record usage
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
@@ -9,6 +10,9 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     // Allow staff to record usage, admin for everything else
     const session = await requireAuth('ADMIN', 'STAFF')
     if (session instanceof Response) return session
+
+    const rl = checkStaffRateLimit(session.userId as number, 'write')
+    if (rl.limited) return Response.json({ error: 'Rate limit exceeded' }, { status: 429 })
 
     const { id } = await ctx.params
     if (!isValidId(id)) return Response.json({ error: 'Invalid promo ID' }, { status: 400 })
@@ -75,9 +79,9 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       data,
     })
     return Response.json(promo)
-  } catch (e: any) {
+  } catch (e) {
     console.error('[PATCH /api/promo/[id]]', e)
-    if (e?.code === 'P2025') return Response.json({ error: 'Promo code not found' }, { status: 404 })
+    if (e instanceof Error && 'code' in e && (e as { code: string }).code === 'P2025') return Response.json({ error: 'Promo code not found' }, { status: 404 })
     return Response.json({ error: 'Failed to update promo code' }, { status: 500 })
   }
 }
@@ -88,6 +92,9 @@ export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: str
     const session = await requireAuth('ADMIN')
     if (session instanceof Response) return session
 
+    const rl = checkStaffRateLimit(session.userId as number, 'write')
+    if (rl.limited) return Response.json({ error: 'Rate limit exceeded' }, { status: 429 })
+
     const { id } = await ctx.params
     if (!isValidId(id)) return Response.json({ error: 'Invalid promo ID' }, { status: 400 })
 
@@ -95,9 +102,9 @@ export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: str
     await prisma.promoUsage.deleteMany({ where: { promoCodeId: numId } })
     await prisma.promoCode.delete({ where: { id: numId } })
     return Response.json({ ok: true })
-  } catch (e: any) {
+  } catch (e) {
     console.error('[DELETE /api/promo/[id]]', e)
-    if (e?.code === 'P2025') return Response.json({ error: 'Promo code not found' }, { status: 404 })
+    if (e instanceof Error && 'code' in e && (e as { code: string }).code === 'P2025') return Response.json({ error: 'Promo code not found' }, { status: 404 })
     return Response.json({ error: 'Failed to delete promo code' }, { status: 500 })
   }
 }

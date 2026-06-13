@@ -4,6 +4,7 @@ import { requireAuth } from '@/lib/authGuard'
 import { isValidId } from '@/lib/sanitize'
 import { writeFile, mkdir } from 'fs/promises'
 import { join } from 'path'
+import { checkStaffRateLimit } from '@/lib/rateLimit'
 
 /**
  * Validate that file content magic bytes match the claimed MIME type.
@@ -28,6 +29,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   try {
     const session = await requireAuth('ADMIN', 'MANAGER', 'STAFF')
     if (session instanceof Response) return session
+
+    const rl = checkStaffRateLimit(session.userId as number, 'write')
+    if (rl.limited) return Response.json({ error: 'Rate limit exceeded' }, { status: 429 })
     const { id } = await params
     if (!isValidId(id)) return Response.json({ error: 'Invalid student ID' }, { status: 400 })
 

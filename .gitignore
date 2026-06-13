@@ -57,3 +57,6 @@ next-env.d.ts
 # Backup directories
 /backups/
 /prisma/backups/
+
+# Receipt writer test output
+/receipts-test/

@@ -3,6 +3,7 @@ import { verifyAuth } from '@/lib/auth'
 import { auditLog } from '@/lib/auditLog'
 import prisma from '@/lib/prisma'
 import { todayString } from '@/lib/subscriptionLogic'
+import { STAFF_COOKIE_NAME, CUSTOMER_COOKIE_NAME, getClearCookieOptions } from '@/lib/cookieConfig'
 
 export async function POST() {
   // Log who is logging out (best effort — don't block on failure)
@@ -41,12 +42,9 @@ export async function POST() {
   } catch { /* ignore — clearing cookie is what matters */ }
 
   const res = NextResponse.json({ message: 'Logout successful' })
-  res.cookies.set('session', '', {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
-    expires: new Date(0),
-    path: '/'
-  })
+  // Clear both cookies to handle any session type
+  const clearOpts = getClearCookieOptions()
+  res.cookies.set(STAFF_COOKIE_NAME, '', clearOpts)
+  res.cookies.set(CUSTOMER_COOKIE_NAME, '', clearOpts)
   return res
 }

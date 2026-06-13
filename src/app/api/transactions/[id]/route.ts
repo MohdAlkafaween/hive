@@ -2,12 +2,16 @@ import { NextRequest } from 'next/server'
 import prisma from '@/lib/prisma'
 import { requireAuth } from '@/lib/authGuard'
 import { isValidId } from '@/lib/sanitize'
+import { checkStaffRateLimit } from '@/lib/rateLimit'
 
 // PATCH — void or refund a transaction
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await requireAuth('ADMIN', 'MANAGER')
     if (session instanceof Response) return session
+
+    const rl = checkStaffRateLimit(session.userId as number, 'write')
+    if (rl.limited) return Response.json({ error: 'Rate limit exceeded' }, { status: 429 })
 
     const { id } = await params
     if (!isValidId(id)) return Response.json({ error: 'Valid transaction ID required' }, { status: 400 })
@@ -35,8 +39,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         },
       })
 
-      // Deactivate linked subscription if exists
-      if (transaction.studentId) {
+      // Deactivate linked subscription: prefer FK, fall back to planType match for legacy data
+      if (transaction.subscriptionId) {
+        await tx.subscription.update({ where: { id: transaction.subscriptionId }, data: { isActive: false } }).catch(() => {})
+      } else if (transaction.studentId) {
         const sub = await tx.subscription.findFirst({
           where: { studentId: transaction.studentId, isActive: true, planType: transaction.planType },
           orderBy: { createdAt: 'desc' },
@@ -78,13 +84,16 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     const session = await requireAuth('ADMIN')
     if (session instanceof Response) return session
 
+    const rl = checkStaffRateLimit(session.userId as number, 'write')
+    if (rl.limited) return Response.json({ error: 'Rate limit exceeded' }, { status: 429 })
+
     const { id } = await params
     if (!isValidId(id)) return Response.json({ error: 'Valid transaction ID required' }, { status: 400 })
 
     await prisma.transaction.delete({ where: { id: Number(id) } })
     return Response.json({ success: true })
-  } catch (e: any) {
-    if (e?.code === 'P2025') return Response.json({ error: 'Transaction not found' }, { status: 404 })
+  } catch (e) {
+    if (e instanceof Error && 'code' in e && (e as { code: string }).code === 'P2025') return Response.json({ error: 'Transaction not found' }, { status: 404 })
     console.error('[DELETE /api/transactions/[id]]', e)
     return Response.json({ error: 'Failed to delete transaction' }, { status: 500 })
   }

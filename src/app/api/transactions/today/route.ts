@@ -3,11 +3,15 @@ import prisma from '@/lib/prisma'
 import { requireAuth } from '@/lib/authGuard'
 import { isValidDateString } from '@/lib/sanitize'
 import { todayString } from '@/lib/subscriptionLogic'
+import { checkStaffRateLimit } from '@/lib/rateLimit'
 
 export async function GET(req: NextRequest) {
   try {
-    const session = await requireAuth('ADMIN')
+    const session = await requireAuth('ADMIN', 'MANAGER')
     if (session instanceof Response) return session
+
+    const rl = checkStaffRateLimit(session.userId as number, 'read')
+    if (rl.limited) return Response.json({ error: 'Rate limit exceeded' }, { status: 429 })
 
     const dateParam = req.nextUrl.searchParams.get('date')
     const today = (dateParam && isValidDateString(dateParam)) ? dateParam : todayString()

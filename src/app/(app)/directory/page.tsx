@@ -18,7 +18,8 @@ interface Student {
   rfidUuid?: string
   lifetimeCheckIns: number
   createdAt: string
-  subscriptions: { planType: string; isActive: boolean; expiryDate: string }[]
+  subscriptions: { planType: string; isActive: boolean; expiryDate: string; startDate: string; visitsUsed: number; totalVisitsAllowed: number }[]
+  transactions?: { amountPaid: number; gateway: string }[]
 }
 
 function DirectoryContent() {
@@ -103,13 +104,21 @@ function DirectoryContent() {
     const rows = displayStudents.map(s => {
       const sub = s.subscriptions[0]
       const active = sub?.isActive && new Date(sub.expiryDate) > new Date()
+      const tx = s.transactions?.[0]
+      const fmtVisits = sub
+        ? (sub.totalVisitsAllowed === -1 ? `${sub.visitsUsed} / Unlimited` : `${sub.visitsUsed} / ${sub.totalVisitsAllowed}`)
+        : '-'
       return {
         'Full Name': s.fullName,
         'Phone': s.phone,
-        'Major': s.major || '',
+        'Major': s.major || '-',
         'Status': active ? 'Active' : sub ? 'Expired' : 'No Subscription',
-        'Subscription Plan': sub?.planType || '',
-        'Expiry Date': sub ? new Date(sub.expiryDate).toLocaleDateString('en-JO') : '',
+        'Subscription Plan': sub?.planType || '-',
+        'Start Date': sub ? new Date(sub.startDate).toLocaleDateString('en-JO') : '-',
+        'Expiry Date': sub ? new Date(sub.expiryDate).toLocaleDateString('en-JO') : '-',
+        'Visits': fmtVisits,
+        'Amount Paid': tx ? `${tx.amountPaid} JD` : '-',
+        'Payment Method': tx?.gateway || '-',
         'Total Check-ins': s.lifetimeCheckIns,
         'Registration Date': new Date(s.createdAt).toLocaleDateString('en-JO'),
       }
@@ -117,7 +126,8 @@ function DirectoryContent() {
     const ws = XLSX.utils.json_to_sheet(rows)
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Students')
-    const today = new Date().toISOString().slice(0, 10)
+    const d = new Date()
+    const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
     XLSX.writeFile(wb, `HIVE-Students-${today}.xlsx`)
   }
 
@@ -132,9 +142,9 @@ function DirectoryContent() {
 
   return (
     <PageTransition>
-    <div className="flex flex-col h-full p-8 gap-8 relative">
+    <div className="flex flex-col h-full p-2 md:p-8 gap-4 md:gap-8 relative">
       <motion.header
-        className="flex items-center justify-between pt-2"
+        className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 pt-2"
         initial={{ opacity: 0, y: -12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
@@ -149,7 +159,7 @@ function DirectoryContent() {
             >
               <FolderOpen size={28} className="text-black" strokeWidth={2} />
             </motion.div>
-            <h1 className="text-4xl font-black tracking-[0.2em] text-white uppercase">{t('dir.directory')}</h1>
+            <h1 className="text-2xl md:text-4xl font-black tracking-[0.2em] text-white uppercase">{t('dir.directory')}</h1>
           </div>
           <p className="text-xs font-bold text-white/30 tracking-widest uppercase ml-1">{t('dir.studentManagement')}</p>
         </div>
@@ -172,28 +182,28 @@ function DirectoryContent() {
         </motion.div>
       </motion.header>
 
-      <div className="flex gap-3">
-        <div className="hive-glow-input flex items-center gap-3 rounded-xl px-5 py-4 flex-1">
+      <div className="flex flex-col md:flex-row gap-3">
+        <div className="hive-glow-input flex items-center gap-3 rounded-xl px-4 md:px-5 py-3 md:py-4 flex-1">
           <Search size={20} className="text-[#F5C518] shrink-0" />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={t('dir.searchPlaceholder')}
-            className="flex-1 bg-transparent text-white text-lg font-medium placeholder-white/20 outline-none"
+            className="flex-1 bg-transparent text-white text-base md:text-lg font-medium placeholder-white/20 outline-none"
           />
           {query && (
             <button onClick={() => setQuery('')} className="text-white/30 hover:text-white p-1 bg-white/5 rounded-md transition-colors">&#10005;</button>
           )}
         </div>
-        <div className="flex items-center gap-2">
-          <select value={sortBy} onChange={e => setSortBy(e.target.value as any)}
-            className="bg-white/5 border border-white/10 rounded-xl px-3 py-3 text-sm text-white focus:border-[#F5C518] outline-none cursor-pointer">
+        <div className="flex items-center gap-2 overflow-x-auto">
+          <select value={sortBy} onChange={e => setSortBy(e.target.value as 'name' | 'recent' | 'checkins')}
+            className="bg-white/5 border border-white/10 rounded-xl px-3 py-3 text-sm text-white focus:border-[#F5C518] outline-none cursor-pointer shrink-0">
             <option value="name">{t('dir.sortName')}</option>
             <option value="recent">{t('dir.sortRecent')}</option>
             <option value="checkins">{t('dir.sortCheckins')}</option>
           </select>
-          <select value={filterSub} onChange={e => setFilterSub(e.target.value as any)}
-            className="bg-white/5 border border-white/10 rounded-xl px-3 py-3 text-sm text-white focus:border-[#F5C518] outline-none cursor-pointer">
+          <select value={filterSub} onChange={e => setFilterSub(e.target.value as 'all' | 'active' | 'expired' | 'none')}
+            className="bg-white/5 border border-white/10 rounded-xl px-3 py-3 text-sm text-white focus:border-[#F5C518] outline-none cursor-pointer shrink-0">
             <option value="all">{t('dir.filterAll')}</option>
             <option value="active">{t('dir.filterActive')}</option>
             <option value="expired">{t('dir.filterExpired')}</option>
@@ -201,10 +211,10 @@ function DirectoryContent() {
           </select>
           <button
             onClick={handleExport}
-            className="flex items-center gap-2 px-4 py-3 bg-[#F5C518] hover:bg-[#D5A711] text-black rounded-xl text-sm font-bold transition-all"
+            className="flex items-center gap-2 px-4 py-3 bg-[#F5C518] hover:bg-[#D5A711] text-black rounded-xl text-sm font-bold transition-all shrink-0"
           >
             <Download size={16} />
-            {t('dir.exportStudents')}
+            <span className="hidden sm:inline">{t('dir.exportStudents')}</span>
           </button>
         </div>
       </div>
@@ -230,9 +240,13 @@ function DirectoryContent() {
               style={{ background: 'rgba(10,10,10,0.8)', backdropFilter: 'blur(8px)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}
             >
               <tr>
-                {[t('dash.name'), t('dir.phone'), t('dir.major'), t('dir.plan'), t('dir.checkIns'), t('dir.memberSince'), ''].map((h, i) => (
-                  <th key={i} className="px-5 py-4 text-[11px] font-bold text-white/30 uppercase tracking-wider">{h}</th>
-                ))}
+                <th className="px-3 md:px-5 py-4 text-[11px] font-bold text-white/30 uppercase tracking-wider">{t('dash.name')}</th>
+                <th className="px-3 md:px-5 py-4 text-[11px] font-bold text-white/30 uppercase tracking-wider hidden sm:table-cell">{t('dir.phone')}</th>
+                <th className="px-3 md:px-5 py-4 text-[11px] font-bold text-white/30 uppercase tracking-wider hidden lg:table-cell">{t('dir.major')}</th>
+                <th className="px-3 md:px-5 py-4 text-[11px] font-bold text-white/30 uppercase tracking-wider">{t('dir.plan')}</th>
+                <th className="px-3 md:px-5 py-4 text-[11px] font-bold text-white/30 uppercase tracking-wider hidden md:table-cell">{t('dir.checkIns')}</th>
+                <th className="px-3 md:px-5 py-4 text-[11px] font-bold text-white/30 uppercase tracking-wider hidden lg:table-cell">{t('dir.memberSince')}</th>
+                <th className="px-3 md:px-5 py-4"></th>
               </tr>
             </thead>
             <tbody>
@@ -255,12 +269,12 @@ function DirectoryContent() {
                     className="hive-table-row cursor-pointer group"
                     style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}
                   >
-                    <td className="px-5 py-4">
-                      <p className="font-bold text-white/90 text-base group-hover:text-[#F5C518] transition-colors">{s.fullName}</p>
+                    <td className="px-3 md:px-5 py-4">
+                      <p className="font-bold text-white/90 text-sm md:text-base group-hover:text-[#F5C518] transition-colors truncate max-w-[140px] md:max-w-none">{s.fullName}</p>
                     </td>
-                    <td className="px-5 py-4 font-medium text-white/40">{s.phone}</td>
-                    <td className="px-5 py-4 text-white/40 font-medium">{s.major ?? '—'}</td>
-                    <td className="px-5 py-4">
+                    <td className="px-3 md:px-5 py-4 font-medium text-white/40 hidden sm:table-cell">{s.phone}</td>
+                    <td className="px-3 md:px-5 py-4 text-white/40 font-medium hidden lg:table-cell">{s.major ?? '—'}</td>
+                    <td className="px-3 md:px-5 py-4">
                       {sub ? (
                         <span className={`px-2.5 py-1 rounded-md text-[10px] font-bold border ${statusColor} uppercase tracking-wider`}>
                           {statusText}
@@ -271,12 +285,14 @@ function DirectoryContent() {
                         </span>
                       )}
                     </td>
-                    <td className="px-5 py-4 font-black text-[#F5C518] text-lg">{s.lifetimeCheckIns}</td>
-                    <td className="px-5 py-4 text-white/40 font-medium flex items-center gap-2 mt-1">
-                      <Calendar size={14} className="opacity-50" />
-                      {new Date(s.createdAt).toLocaleDateString('en-JO', { month: 'short', year: 'numeric' })}
+                    <td className="px-3 md:px-5 py-4 font-black text-[#F5C518] text-lg hidden md:table-cell">{s.lifetimeCheckIns}</td>
+                    <td className="px-3 md:px-5 py-4 text-white/40 font-medium hidden lg:table-cell">
+                      <div className="flex items-center gap-2">
+                        <Calendar size={14} className="opacity-50" />
+                        {new Date(s.createdAt).toLocaleDateString('en-JO', { month: 'short', year: 'numeric' })}
+                      </div>
                     </td>
-                    <td className="px-5 py-4 text-right">
+                    <td className="px-3 md:px-5 py-4 text-right">
                       <ChevronRight size={18} className="text-white/20 group-hover:text-[#F5C518] transition-colors inline-block" />
                     </td>
                   </tr>

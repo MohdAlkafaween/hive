@@ -26,7 +26,7 @@ function LayoutShell({ children }: { children: ReactNode }) {
       >
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
           <span>{t('footer.rights')}</span>
-          <span className="hover:text-white/50 cursor-help font-medium transition-colors" title="F1: Search | F2: New Student | Esc: Dismiss">
+          <span className="hover:text-white/50 cursor-help font-medium transition-colors" title="F1: Search | F2: New Customer | Esc: Dismiss">
             {t('footer.hotkeys')}
           </span>
         </div>

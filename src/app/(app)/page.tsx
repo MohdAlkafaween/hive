@@ -46,7 +46,7 @@ export default function DashboardPage() {
   const [notifications, setNotifications] = useState<Notifications | null>(null)
 
   // Stable callbacks to avoid infinite re-render loop in TodayFeedTable
-  const handleLogsFetched = useCallback((logs: any[]) => setLogCount(logs.length), [])
+  const handleLogsFetched = useCallback((logs: unknown[]) => setLogCount(logs.length), [])
   const handleNotifications = useCallback((n: Notifications) => setNotifications(n), [])
   const [dismissedNotifications, setDismissedNotifications] = useState<Set<string>>(() => new Set())
 
@@ -93,7 +93,7 @@ export default function DashboardPage() {
       const res = await fetch(`/api/students/${student.id}`)
       if (res.ok) {
         const data = await res.json()
-        const activeSub = data.subscriptions?.find((s: any) => s.isActive)
+        const activeSub = data.subscriptions?.find((s: { isActive: boolean }) => s.isActive)
         if (activeSub) {
           setSubInfo(activeSub)
         } else {
@@ -195,7 +195,7 @@ export default function DashboardPage() {
 
       {/* 1. Brand Header */}
       <motion.section
-        className="flex flex-col items-center justify-center text-center py-5 select-none"
+        className="flex flex-col items-center justify-center text-center py-3 md:py-5 select-none"
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}

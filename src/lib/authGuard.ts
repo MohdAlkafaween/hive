@@ -22,10 +22,21 @@ export async function requireAuth(...allowedRoles: string[]): Promise<Record<str
   }
 
   // Live DB role check — never trust the JWT role claim alone
-  const user = await prisma.user.findUnique({
-    where: { id: session.userId as number },
-    select: { role: true, isActive: true },
-  })
+  let user: { role: string; isActive: boolean } | null
+  try {
+    user = await prisma.user.findUnique({
+      where: { id: session.userId as number },
+      select: { role: true, isActive: true },
+    })
+  } catch (dbError) {
+    // DB error (SQLITE_BUSY, connection issue) — return 503, NOT 401
+    // Returning 401 on a transient DB error would cause the frontend to log the user out
+    console.error('[requireAuth] DB lookup failed:', dbError)
+    return new Response(
+      JSON.stringify({ error: 'Service temporarily unavailable' }),
+      { status: 503, headers: { 'Content-Type': 'application/json', 'Retry-After': '2' } }
+    )
+  }
 
   if (!user) {
     auditLog('AUTH_FAILED', {

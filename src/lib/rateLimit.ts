@@ -85,16 +85,20 @@ export function checkRateLimit(
  * Falls back to x-real-ip or a constant — rate limiting still works
  * because login also rate-limits per email address.
  */
+export function checkStaffRateLimit(userId: number | string, tier: 'write' | 'read') {
+  const limit = tier === 'write' ? 60 : 120
+  const window = 60 * 1000
+  return checkRateLimit(`staff:${tier}:${userId}`, limit, window)
+}
+
 export function getClientIp(req: Request): string {
   // Only trust proxy headers if explicitly configured (e.g., behind nginx/cloudflare)
   if (process.env.TRUST_PROXY === 'true') {
     const forwarded = req.headers.get('x-forwarded-for')
     if (forwarded) return forwarded.split(',')[0].trim()
+    const realIp = req.headers.get('x-real-ip')
+    if (realIp) return realIp
   }
-
-  // x-real-ip is set by reverse proxies (nginx) — more trustworthy than x-forwarded-for
-  const realIp = req.headers.get('x-real-ip')
-  if (realIp) return realIp
 
   // In direct deployment without proxy, all requests appear as same IP
   // This is still useful — combined with per-email rate limiting, it provides defense

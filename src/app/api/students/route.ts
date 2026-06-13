@@ -1,13 +1,18 @@
 import { NextRequest } from 'next/server'
 import { randomBytes } from 'crypto'
 import prisma from '@/lib/prisma'
+import bcrypt from 'bcryptjs'
 import { requireAuth } from '@/lib/authGuard'
 import { sanitizeString, sanitizePhone, sanitizeRfid } from '@/lib/sanitize'
+import { checkStaffRateLimit } from '@/lib/rateLimit'
 
 export async function GET(req: NextRequest) {
   try {
-    const session = await requireAuth('ADMIN', 'STAFF')
+    const session = await requireAuth('ADMIN', 'MANAGER', 'STAFF')
     if (session instanceof Response) return session
+
+    const rl = checkStaffRateLimit(session.userId as number, 'read')
+    if (rl.limited) return Response.json({ error: 'Rate limit exceeded' }, { status: 429 })
 
     const search = req.nextUrl.searchParams.get('search')?.trim()
 
@@ -45,8 +50,20 @@ export async function GET(req: NextRequest) {
         orderBy: { createdAt: 'desc' },
         take: search ? 10 : limit,
         ...(search ? {} : { skip }),
-        include: {
+        // SECURITY (D1): directory list never needs qrToken/rfidUuid/DOB/emergency contacts
+        select: {
+          id: true,
+          studentNumber: true,
+          fullName: true,
+          phone: true,
+          email: true,
+          major: true,
+          status: true,
+          photoUrl: true,
+          createdAt: true,
+          lifetimeCheckIns: true,
           subscriptions: { where: { isActive: true }, orderBy: { createdAt: 'desc' }, take: 1 },
+          transactions: { orderBy: { createdAt: 'desc' }, take: 1, select: { amountPaid: true, gateway: true } },
         },
       }),
       search ? Promise.resolve(0) : prisma.student.count({ where }),
@@ -60,8 +77,11 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const session = await requireAuth('ADMIN', 'STAFF')
+    const session = await requireAuth('ADMIN', 'MANAGER', 'STAFF')
     if (session instanceof Response) return session
+
+    const rl = checkStaffRateLimit(session.userId as number, 'write')
+    if (rl.limited) return Response.json({ error: 'Rate limit exceeded' }, { status: 429 })
 
     const body = await req.json().catch(() => null)
     if (!body) return Response.json({ error: 'Invalid request body' }, { status: 400 })
@@ -81,6 +101,14 @@ export async function POST(req: NextRequest) {
     if (!fullName || fullName.length < 2) return Response.json({ error: 'Valid name required (min 2 chars)' }, { status: 400 })
     if (!phone || phone.length < 7) return Response.json({ error: 'Valid phone required (min 7 digits)' }, { status: 400 })
 
+    // Optional: admin can set a login password during creation
+    let hashedPassword: string | null = null
+    let enableLogin = false
+    if (body.password && typeof body.password === 'string' && body.password.length >= 6) {
+      hashedPassword = await bcrypt.hash(body.password, 12)
+      enableLogin = true
+    }
+
     const qrToken = randomBytes(16).toString('hex')
 
     const student = await prisma.$transaction(async (tx) => {
@@ -96,6 +124,7 @@ export async function POST(req: NextRequest) {
           fullName, phone, major, rfidUuid, qrToken, studentNumber: nextNum,
           email, university, gender, emergencyContact, emergencyPhone, referralSource,
           dateOfBirth: dateOfBirth && !isNaN(dateOfBirth.getTime()) ? dateOfBirth : null,
+          ...(hashedPassword ? { password: hashedPassword, isLoginEnabled: enableLogin } : {}),
         },
       })
     })

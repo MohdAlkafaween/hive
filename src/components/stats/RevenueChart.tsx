@@ -23,7 +23,7 @@ export function RevenueChart() {
     for (let i = days - 1; i >= 0; i--) {
       const d = new Date()
       d.setDate(d.getDate() - i)
-      const dateStr = d.toISOString().slice(0, 10)
+      const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
       const label = d.toLocaleDateString('en-JO', { month: 'short', day: 'numeric' })
 
       promises.push(

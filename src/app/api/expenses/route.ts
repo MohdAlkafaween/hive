@@ -1,11 +1,15 @@
 import prisma from '@/lib/prisma'
 import { requireAuth } from '@/lib/authGuard'
+import { checkStaffRateLimit } from '@/lib/rateLimit'
 
 export async function GET(req: Request) {
   try {
     // STAFF needs read access to expenses for the barista POS page (fix #8)
     const session = await requireAuth('ADMIN', 'MANAGER', 'STAFF')
     if (session instanceof Response) return session
+
+    const rl = checkStaffRateLimit(session.userId as number, 'read')
+    if (rl.limited) return Response.json({ error: 'Rate limit exceeded' }, { status: 429 })
 
     const { searchParams } = new URL(req.url)
     const from = searchParams.get('from')
@@ -15,12 +19,13 @@ export async function GET(req: Request) {
     if (from || to) {
       where.date = {}
       if (from) (where.date as Record<string, unknown>).gte = new Date(from)
-      if (to) (where.date as Record<string, unknown>).lte = new Date(to + 'T23:59:59')
+      if (to) (where.date as Record<string, unknown>).lte = new Date(to + 'T23:59:59.999')
     }
 
     const expenses = await prisma.cafeExpense.findMany({
       where,
       orderBy: { date: 'desc' },
+      take: 2000,
     })
     return Response.json(expenses)
   } catch {
@@ -32,6 +37,9 @@ export async function POST(req: Request) {
   try {
     const session = await requireAuth('ADMIN', 'MANAGER')
     if (session instanceof Response) return session
+
+    const rl = checkStaffRateLimit(session.userId as number, 'write')
+    if (rl.limited) return Response.json({ error: 'Rate limit exceeded' }, { status: 429 })
 
     const body = await req.json().catch(() => null)
     if (!body?.description?.trim() || typeof body.amount !== 'number' || body.amount <= 0) {

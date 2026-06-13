@@ -178,11 +178,11 @@ export function TodayFeedTable({ refreshTrigger, onLogsFetched, onNotifications,
               style={{ background: 'rgba(10, 10, 10, 0.8)', backdropFilter: 'blur(8px)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}
             >
               <tr>
-                <th className="text-left px-5 py-3 text-[10px] font-bold text-white/30 uppercase tracking-widest">{t('dash.name')}</th>
-                <th className="text-left px-5 py-3 text-[10px] font-bold text-white/30 uppercase tracking-widest">{t('dash.checkIn')}</th>
-                <th className="text-left px-5 py-3 text-[10px] font-bold text-white/30 uppercase tracking-widest">{t('dash.checkOut')}</th>
-                <th className="text-left px-5 py-3 text-[10px] font-bold text-white/30 uppercase tracking-widest">{t('dash.duration')}</th>
-                <th className="px-5 py-3" />
+                <th className="text-left px-3 md:px-5 py-3 text-[10px] font-bold text-white/30 uppercase tracking-widest">{t('dash.name')}</th>
+                <th className="text-left px-3 md:px-5 py-3 text-[10px] font-bold text-white/30 uppercase tracking-widest">{t('dash.checkIn')}</th>
+                <th className="text-left px-3 md:px-5 py-3 text-[10px] font-bold text-white/30 uppercase tracking-widest hidden sm:table-cell">{t('dash.checkOut')}</th>
+                <th className="text-left px-3 md:px-5 py-3 text-[10px] font-bold text-white/30 uppercase tracking-widest hidden lg:table-cell">{t('dash.duration')}</th>
+                <th className="px-3 md:px-5 py-3" />
               </tr>
             </thead>
             <tbody>
@@ -204,9 +204,9 @@ export function TodayFeedTable({ refreshTrigger, onLogsFetched, onNotifications,
                   <tr key={log.id} className="hive-table-row group cursor-default"
                     style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}
                   >
-                    <td className="px-5 py-3.5">
+                    <td className="px-3 md:px-5 py-3.5">
                       <div className="flex items-center gap-2">
-                        <div>
+                        <div className="min-w-0">
                           {log.student ? (
                             <button
                               onClick={() => {
@@ -239,10 +239,10 @@ export function TodayFeedTable({ refreshTrigger, onLogsFetched, onNotifications,
                         )}
                       </div>
                     </td>
-                    <td className="px-5 py-3.5 text-white/60 font-mono font-semibold text-sm">
+                    <td className="px-3 md:px-5 py-3.5 text-white/60 font-mono font-semibold text-sm">
                       {fmt(log.checkInTime)}
                     </td>
-                    <td className="px-5 py-3.5">
+                    <td className="px-3 md:px-5 py-3.5 hidden sm:table-cell">
                       {log.checkOutTime ? (
                         <span className="text-white/40 font-mono font-medium text-sm px-2 py-1 rounded"
                           style={{ background: 'rgba(255,255,255,0.04)' }}
@@ -261,7 +261,7 @@ export function TodayFeedTable({ refreshTrigger, onLogsFetched, onNotifications,
                         </span>
                       )}
                     </td>
-                    <td className="px-5 py-3.5">
+                    <td className="px-3 md:px-5 py-3.5 hidden lg:table-cell">
                       {(() => {
                         const start = new Date(log.checkInTime).getTime()
                         const end = log.checkOutTime ? new Date(log.checkOutTime).getTime() : Date.now()
@@ -292,7 +292,7 @@ export function TodayFeedTable({ refreshTrigger, onLogsFetched, onNotifications,
                         )
                       })()}
                     </td>
-                    <td className="px-5 py-3.5 text-right w-48">
+                    <td className="px-3 md:px-5 py-3.5 text-right w-auto md:w-48">
                       <div className="flex items-center justify-end gap-2">
                         {!log.checkOutTime && (
                           <Button

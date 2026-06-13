@@ -3,12 +3,16 @@ import prisma from '@/lib/prisma'
 import { requireAuth } from '@/lib/authGuard'
 import { isValidId } from '@/lib/sanitize'
 import { todayString } from '@/lib/subscriptionLogic'
+import { checkStaffRateLimit } from '@/lib/rateLimit'
 
 // GET — today's waitlist
 export async function GET() {
   try {
     const session = await requireAuth('ADMIN', 'MANAGER', 'STAFF')
     if (session instanceof Response) return session
+
+    const rl = checkStaffRateLimit(session.userId as number, 'read')
+    if (rl.limited) return Response.json({ error: 'Rate limit exceeded' }, { status: 429 })
 
     const today = todayString()
     const entries = await prisma.waitlistEntry.findMany({
@@ -28,6 +32,9 @@ export async function POST(req: NextRequest) {
   try {
     const session = await requireAuth('ADMIN', 'MANAGER', 'STAFF')
     if (session instanceof Response) return session
+
+    const rl = checkStaffRateLimit(session.userId as number, 'write')
+    if (rl.limited) return Response.json({ error: 'Rate limit exceeded' }, { status: 429 })
 
     const body = await req.json().catch(() => null)
     if (!body?.studentId || !isValidId(body.studentId)) {
@@ -66,6 +73,9 @@ export async function PATCH(req: NextRequest) {
     const session = await requireAuth('ADMIN', 'MANAGER', 'STAFF')
     if (session instanceof Response) return session
 
+    const rl = checkStaffRateLimit(session.userId as number, 'write')
+    if (rl.limited) return Response.json({ error: 'Rate limit exceeded' }, { status: 429 })
+
     const body = await req.json().catch(() => null)
     if (!body?.id || !isValidId(body.id)) return Response.json({ error: 'Valid id required' }, { status: 400 })
     if (!['ADMITTED', 'CANCELLED'].includes(body.status)) {
@@ -77,8 +87,8 @@ export async function PATCH(req: NextRequest) {
       data: { status: body.status },
     })
     return Response.json(updated)
-  } catch (e: any) {
-    if (e?.code === 'P2025') return Response.json({ error: 'Entry not found' }, { status: 404 })
+  } catch (e) {
+    if (e instanceof Error && 'code' in e && (e as { code: string }).code === 'P2025') return Response.json({ error: 'Entry not found' }, { status: 404 })
     console.error('[PATCH /api/waitlist]', e)
     return Response.json({ error: 'Failed to update waitlist' }, { status: 500 })
   }

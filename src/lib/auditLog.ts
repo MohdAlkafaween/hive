@@ -13,11 +13,18 @@ type AuditEvent =
   | 'STUDENT_CREATED'
   | 'STUDENT_DELETED'
   | 'SUBSCRIPTION_CREATED'
+  | 'SUBSCRIPTION_MODIFIED'
   | 'AUTH_FAILED'
   | 'AUTH_FORBIDDEN'
   | 'SEED_BLOCKED'
   | 'INVALID_INPUT'
   | 'LOGIN_BLOCKED'
+  | 'CHECKIN'
+  | 'CHECKOUT'
+  | 'AUTO_CHECKOUT'
+  | 'BULK_CHECKOUT'
+  | 'DB_RESTORE'
+  | 'CUSTOMER_PASSWORD_RESET'
 
 interface AuditEntry {
   timestamp: string

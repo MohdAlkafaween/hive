@@ -1,12 +1,16 @@
 import prisma from '@/lib/prisma'
 import { requireAuth } from '@/lib/authGuard'
 import { sanitizeString } from '@/lib/sanitize'
+import { checkStaffRateLimit } from '@/lib/rateLimit'
 
 export async function GET() {
   try {
     // Menu is readable by authenticated users (barista page needs it)
     const session = await requireAuth('ADMIN', 'MANAGER', 'STAFF')
     if (session instanceof Response) return session
+
+    const rl = checkStaffRateLimit(session.userId as number, 'read')
+    if (rl.limited) return Response.json({ error: 'Rate limit exceeded' }, { status: 429 })
 
     const items = await prisma.menuItem.findMany({
       where: { isDeleted: false, isCustom: false }, // Hide soft-deleted and ad-hoc custom items
@@ -26,6 +30,9 @@ export async function POST(req: Request) {
   try {
     const session = await requireAuth('ADMIN', 'STAFF')
     if (session instanceof Response) return session
+
+    const rl = checkStaffRateLimit(session.userId as number, 'write')
+    if (rl.limited) return Response.json({ error: 'Rate limit exceeded' }, { status: 429 })
 
     const body = await req.json().catch(() => null)
     if (!body) return Response.json({ error: 'Invalid request body' }, { status: 400 })

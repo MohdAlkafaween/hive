@@ -5,7 +5,7 @@ import { existsSync } from 'fs'
 const DB_PATH = join(process.cwd(), 'dev.db')
 const BACKUP_DIR = join(process.cwd(), 'backups')
 
-export async function runScheduledBackup(trigger: 'SCHEDULED' | 'STARTUP' = 'SCHEDULED'): Promise<{ success: boolean; fileName?: string; fileSize?: number; error?: string }> {
+export async function runScheduledBackup(trigger: 'SCHEDULED' | 'STARTUP' | 'MANUAL' = 'SCHEDULED'): Promise<{ success: boolean; fileName?: string; fileSize?: number; error?: string }> {
   const { default: prisma } = await import('@/lib/prisma')
 
   try {
@@ -28,8 +28,8 @@ export async function runScheduledBackup(trigger: 'SCHEDULED' | 'STARTUP' = 'SCH
     })
 
     return { success: true, fileName, fileSize: stats.size }
-  } catch (e: any) {
-    const err = e?.message || 'Unknown backup error'
+  } catch (e) {
+    const err = e instanceof Error ? e.message : 'Unknown backup error'
     try {
       await prisma.backupLog.create({ data: { fileName: '', fileSize: 0, success: false, error: err, trigger } })
     } catch {}

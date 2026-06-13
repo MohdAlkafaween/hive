@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Trash2, ToggleLeft, ToggleRight, Loader2, Tag, Users, Shield, Ticket, Calendar, Hash, Percent, DollarSign, ChevronDown, ChevronUp, User, KeyRound, ClipboardList, LogIn, LogOut, Eye, EyeOff, ChevronLeft, ChevronRight, Filter, ArrowLeft, Phone, Mail, Clock, Edit3, Save, X, UserX, UserCheck as UserCheckIcon, CalendarDays, Database, Download, Upload, HardDrive, Monitor, Banknote } from 'lucide-react'
+import { Plus, Trash2, ToggleLeft, ToggleRight, Loader2, Tag, Users, Shield, Ticket, Calendar, Hash, Percent, DollarSign, ChevronDown, ChevronUp, User, KeyRound, ClipboardList, LogIn, LogOut, Eye, EyeOff, ChevronLeft, ChevronRight, Filter, ArrowLeft, Phone, Mail, Clock, Edit3, Save, X, UserX, UserCheck as UserCheckIcon, CalendarDays, Database, Download, Upload, HardDrive, Monitor, Banknote, ScanLine, MessageSquare } from 'lucide-react'
 import { RegistersSection } from '@/components/admin/RegistersSection'
 import { PlansSection } from '@/components/admin/PlansSection'
 import { PageTransition } from '@/components/animations/PageTransition'
@@ -58,6 +58,8 @@ const ALL_PAGES = [
   { path: '/logs', label: 'Logs', desc: 'Check-in/out history' },
   { path: '/stats', label: 'Statistics', desc: 'Reports & analytics' },
   { path: '/barista', label: 'Barista POS', desc: 'Drinks & orders' },
+  { path: '/orders', label: 'Orders', desc: 'Customer order queue' },
+  { path: '/feedback', label: 'Feedback', desc: 'Customer reviews' },
   { path: '/admin', label: 'Admin Panel', desc: 'Staff & promos management' },
 ]
 
@@ -723,10 +725,10 @@ function StaffListView({ onSelect }: { onSelect: (id: number) => void }) {
   }
 
   const roleColors: Record<string, string> = {
-    ADMIN: 'text-red-400', MANAGER: 'text-amber-400', STAFF: 'text-blue-400',
+    ADMIN: 'text-red-400', MANAGER: 'text-amber-400', STAFF: 'text-blue-400', BARISTA: 'text-emerald-400',
   }
   const roleBgs: Record<string, string> = {
-    ADMIN: 'rgba(239, 68, 68, 0.1)', MANAGER: 'rgba(245, 158, 11, 0.1)', STAFF: 'rgba(59, 130, 246, 0.1)',
+    ADMIN: 'rgba(239, 68, 68, 0.1)', MANAGER: 'rgba(245, 158, 11, 0.1)', STAFF: 'rgba(59, 130, 246, 0.1)', BARISTA: 'rgba(16, 185, 129, 0.1)',
   }
 
   const togglePermission = (path: string) => {
@@ -782,6 +784,7 @@ function StaffListView({ onSelect }: { onSelect: (id: number) => void }) {
               <select value={role} onChange={(e) => setRole(e.target.value)}
                 className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white focus:border-[#F5C518] focus:outline-none focus:ring-1 focus:ring-[#F5C518]"
                 style={{ colorScheme: 'dark' }}>
+                <option value="BARISTA">{t('admin.barista') || 'Barista'}</option>
                 <option value="STAFF">{t('admin.staff')}</option>
                 <option value="MANAGER">{t('admin.managerCustom')}</option>
                 <option value="ADMIN">{t('admin.adminFull')}</option>
@@ -918,7 +921,7 @@ function StaffDetailView({ userId, onBack }: { userId: number; onBack: () => voi
   const [savingPerms, setSavingPerms] = useState(false)
 
   // Attendance month
-  const [attendanceMonth, setAttendanceMonth] = useState(new Date().toISOString().slice(0, 7))
+  const [attendanceMonth, setAttendanceMonth] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` })
 
   const fetchUser = useCallback(async () => {
     setLoading(true)
@@ -1007,10 +1010,10 @@ function StaffDetailView({ userId, onBack }: { userId: number; onBack: () => voi
   }
 
   const roleColors: Record<string, string> = {
-    ADMIN: 'text-red-400', MANAGER: 'text-amber-400', STAFF: 'text-blue-400',
+    ADMIN: 'text-red-400', MANAGER: 'text-amber-400', STAFF: 'text-blue-400', BARISTA: 'text-emerald-400',
   }
   const roleBgs: Record<string, string> = {
-    ADMIN: 'rgba(239, 68, 68, 0.1)', MANAGER: 'rgba(245, 158, 11, 0.1)', STAFF: 'rgba(59, 130, 246, 0.1)',
+    ADMIN: 'rgba(239, 68, 68, 0.1)', MANAGER: 'rgba(245, 158, 11, 0.1)', STAFF: 'rgba(59, 130, 246, 0.1)', BARISTA: 'rgba(16, 185, 129, 0.1)',
   }
 
   const eventColors: Record<string, { bg: string; text: string; icon: React.ReactNode }> = {
@@ -1323,7 +1326,7 @@ function StaffDetailView({ userId, onBack }: { userId: number; onBack: () => voi
           {Array.from({ length: daysInMonth }, (_, i) => {
             const day = i + 1
             const isPresent = attendanceDays.includes(day)
-            const isToday = attendanceMonth === new Date().toISOString().slice(0, 7) && day === new Date().getDate()
+            const now = new Date(); const isToday = attendanceMonth === `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}` && day === now.getDate()
             return (
               <div key={day} className={`relative text-center py-2 rounded-lg text-xs font-semibold transition-all ${
                 isPresent
@@ -1404,10 +1407,10 @@ function ShiftsSection() {
   }
 
   const roleColors: Record<string, string> = {
-    ADMIN: 'text-red-400', MANAGER: 'text-amber-400', STAFF: 'text-blue-400',
+    ADMIN: 'text-red-400', MANAGER: 'text-amber-400', STAFF: 'text-blue-400', BARISTA: 'text-emerald-400',
   }
   const roleBgs: Record<string, string> = {
-    ADMIN: 'rgba(239, 68, 68, 0.1)', MANAGER: 'rgba(245, 158, 11, 0.1)', STAFF: 'rgba(59, 130, 246, 0.1)',
+    ADMIN: 'rgba(239, 68, 68, 0.1)', MANAGER: 'rgba(245, 158, 11, 0.1)', STAFF: 'rgba(59, 130, 246, 0.1)', BARISTA: 'rgba(16, 185, 129, 0.1)',
   }
 
   return (
@@ -1477,7 +1480,7 @@ function BackupSection() {
   const [status, setStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
 
   // Backup history
-  const [backupLogs, setBackupLogs] = useState<any[]>([])
+  const [backupLogs, setBackupLogs] = useState<{ id: number; success: boolean; fileName: string | null; fileSize: number | null; trigger: string; error: string | null; timestamp: string }[]>([])
   const [lastSuccess, setLastSuccess] = useState<any>(null)
   const [triggering, setTriggering] = useState(false)
 
@@ -1669,7 +1672,7 @@ function BackupSection() {
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `hive-backup-${new Date().toISOString().slice(0, 10)}.db`
+      const _d = new Date(); a.download = `hive-backup-${_d.getFullYear()}-${String(_d.getMonth() + 1).padStart(2, '0')}-${String(_d.getDate()).padStart(2, '0')}.db`
       a.click()
       URL.revokeObjectURL(url)
       setStatus({ type: 'success', message: 'Backup downloaded successfully!' })
@@ -1985,7 +1988,7 @@ function BackupSection() {
             {t('admin.backupHistory')}
           </h3>
           <div className="space-y-2 max-h-64 overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
-            {backupLogs.slice(0, 20).map((log: any) => (
+            {backupLogs.slice(0, 20).map((log) => (
               <div key={log.id} className={`flex items-center justify-between p-3 rounded-xl border ${log.success ? 'border-green-500/10 bg-green-500/5' : 'border-red-500/10 bg-red-500/5'}`}>
                 <div className="flex items-center gap-3">
                   <span className={`w-2 h-2 rounded-full ${log.success ? 'bg-green-400' : 'bg-red-400'}`} />
@@ -2000,7 +2003,7 @@ function BackupSection() {
                     log.trigger === 'SCHEDULED' ? 'bg-purple-500/10 text-purple-400' :
                     'bg-white/5 text-white/40'
                   }`}>{log.trigger}</span>
-                  {log.success && <span className="text-[10px] text-white/20">{(log.fileSize / 1024).toFixed(1)} KB</span>}
+                  {log.success && log.fileSize != null && <span className="text-[10px] text-white/20">{(log.fileSize / 1024).toFixed(1)} KB</span>}
                   {log.error && <span className="text-[10px] text-red-400 max-w-[150px] truncate">{log.error}</span>}
                 </div>
               </div>
@@ -2018,8 +2021,19 @@ function SettingsSection() {
   const { toast } = useToast()
   const [businessName, setBusinessName] = useState('')
   const [receiptFooter, setReceiptFooter] = useState('')
+  const [receiptSavePath, setReceiptSavePath] = useState('')
+  const [testingPath, setTestingPath] = useState(false)
+  const [pathTestResult, setPathTestResult] = useState<{ success: boolean; error?: string } | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+
+  // Kiosk mode toggle
+  const [kioskEnabled, setKioskEnabled] = useState(false)
+  const [savingKiosk, setSavingKiosk] = useState(false)
+
+  // Feedback toggle
+  const [feedbackEnabled, setFeedbackEnabled] = useState(false)
+  const [savingFeedback, setSavingFeedback] = useState(false)
 
   useEffect(() => {
     fetch('/api/settings')
@@ -2027,6 +2041,9 @@ function SettingsSection() {
       .then((s: Record<string, string>) => {
         if (s.businessName) setBusinessName(s.businessName)
         if (s.receiptFooter) setReceiptFooter(s.receiptFooter)
+        if (s.receiptSavePath !== undefined) setReceiptSavePath(s.receiptSavePath)
+        if (s.kioskEnabled) setKioskEnabled(s.kioskEnabled === 'true')
+        if (s.feedbackEnabled) setFeedbackEnabled(s.feedbackEnabled === 'true')
       })
       .catch(() => {})
       .finally(() => setLoading(false))
@@ -2038,6 +2055,7 @@ function SettingsSection() {
       const settings = [
         { key: 'businessName', value: businessName.trim() || 'HIVE Study House' },
         { key: 'receiptFooter', value: receiptFooter.trim() },
+        { key: 'receiptSavePath', value: receiptSavePath.trim() },
       ]
       let allOk = true
       for (const s of settings) {
@@ -2054,10 +2072,106 @@ function SettingsSection() {
     }
   }
 
+  const handleSaveKiosk = async () => {
+    setSavingKiosk(true)
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'kioskEnabled', value: String(kioskEnabled) }),
+      })
+      if (res.ok) toast(t('common.saved'), 'success')
+      else toast(t('common.saveFailed'), 'error')
+    } catch {
+      toast(t('common.saveFailed'), 'error')
+    } finally {
+      setSavingKiosk(false)
+    }
+  }
+
+  const handleSaveFeedback = async () => {
+    setSavingFeedback(true)
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'feedbackEnabled', value: String(feedbackEnabled) }),
+      })
+      if (res.ok) toast(t('common.saved'), 'success')
+      else toast(t('common.saveFailed'), 'error')
+    } catch {
+      toast(t('common.saveFailed'), 'error')
+    } finally {
+      setSavingFeedback(false)
+    }
+  }
+
   if (loading) return <div className="flex justify-center py-12"><Loader2 size={24} className="animate-spin text-white/25" /></div>
 
   return (
     <div className="space-y-6">
+      {/* Feedback Toggle */}
+      <div className="hive-card !rounded-2xl">
+        <h3 className="text-sm font-bold text-white flex items-center gap-2 mb-2">
+          <MessageSquare size={16} className="text-[#F5C518]" />
+          {t('admin.feedbackMode')}
+        </h3>
+        <p className="text-xs text-white/30 mb-4">{t('admin.feedbackModeDesc')}</p>
+
+        <div className="flex items-center gap-4 mb-4">
+          <label className="flex items-center gap-3 cursor-pointer">
+            <div className={`relative w-12 h-6 rounded-full transition-all ${feedbackEnabled ? 'bg-[#F5C518]' : 'bg-white/10'}`}
+              onClick={() => setFeedbackEnabled(!feedbackEnabled)}>
+              <div className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-all ${feedbackEnabled ? 'left-7' : 'left-1'}`} />
+            </div>
+            <span className={`text-sm font-bold ${feedbackEnabled ? 'text-[#F5C518]' : 'text-white/30'}`}>
+              {feedbackEnabled ? t('admin.feedbackEnabled') : t('admin.feedbackDisabled')}
+            </span>
+          </label>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <button onClick={handleSaveFeedback} disabled={savingFeedback}
+            className="px-4 py-2.5 rounded-lg bg-[#F5C518] hover:bg-[#D5A711] text-black font-bold text-sm transition-all disabled:opacity-40 flex items-center gap-2">
+            {savingFeedback ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} {t('admin.save')}
+          </button>
+        </div>
+      </div>
+
+      {/* Kiosk Mode Toggle */}
+      <div className="hive-card !rounded-2xl">
+        <h3 className="text-sm font-bold text-white flex items-center gap-2 mb-2">
+          <ScanLine size={16} className="text-[#F5C518]" />
+          {t('admin.kioskMode')}
+        </h3>
+        <p className="text-xs text-white/30 mb-4">{t('admin.kioskModeDesc')}</p>
+
+        <div className="flex items-center gap-4 mb-4">
+          <label className="flex items-center gap-3 cursor-pointer">
+            <div className={`relative w-12 h-6 rounded-full transition-all ${kioskEnabled ? 'bg-[#F5C518]' : 'bg-white/10'}`}
+              onClick={() => setKioskEnabled(!kioskEnabled)}>
+              <div className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-all ${kioskEnabled ? 'left-7' : 'left-1'}`} />
+            </div>
+            <span className={`text-sm font-bold ${kioskEnabled ? 'text-[#F5C518]' : 'text-white/30'}`}>
+              {kioskEnabled ? t('admin.kioskEnabled') : t('admin.kioskDisabled')}
+            </span>
+          </label>
+        </div>
+
+        {!kioskEnabled && (
+          <div className="p-3 rounded-xl bg-amber-500/5 border border-amber-500/15 text-xs text-amber-400/80 mb-4">
+            {t('admin.kioskDisabledWarning')}
+          </div>
+        )}
+
+        <div className="flex items-center gap-3">
+          <button onClick={handleSaveKiosk} disabled={savingKiosk}
+            className="px-4 py-2.5 rounded-lg bg-[#F5C518] hover:bg-[#D5A711] text-black font-bold text-sm transition-all disabled:opacity-40 flex items-center gap-2">
+            {savingKiosk ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} {t('admin.save')}
+          </button>
+        </div>
+      </div>
+
       <div className="hive-card !rounded-2xl">
         <h3 className="text-sm font-bold text-white flex items-center gap-2 mb-5">
           <Monitor size={16} className="text-[#F5C518]" />
@@ -2086,6 +2200,41 @@ function SettingsSection() {
               maxLength={300}
             />
             <p className="text-[10px] text-white/20">{t('admin.receiptFooterDesc')}</p>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-bold text-white/30 uppercase tracking-wider">{t('settings.receiptSavePath')}</label>
+            <div className="flex gap-2">
+              <input
+                value={receiptSavePath}
+                onChange={(e) => { setReceiptSavePath(e.target.value); setPathTestResult(null) }}
+                placeholder={process.platform === 'win32' ? 'C:\\Receipts' : '/home/hive/receipts'}
+                className="flex-1 bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-sm text-white focus:border-[#F5C518] focus:outline-none focus:ring-1 focus:ring-[#F5C518] placeholder:text-white/20 transition-all font-mono"
+                maxLength={500}
+              />
+              <button
+                type="button"
+                onClick={async () => {
+                  setTestingPath(true)
+                  setPathTestResult(null)
+                  try {
+                    const res = await fetch('/api/settings/test-receipt-path', { method: 'POST' })
+                    const data = await res.json()
+                    setPathTestResult(data)
+                  } catch { setPathTestResult({ success: false, error: 'Request failed' }) }
+                  finally { setTestingPath(false) }
+                }}
+                disabled={testingPath}
+                className="px-3 py-2.5 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 text-white/60 text-xs font-bold transition-all disabled:opacity-40 whitespace-nowrap"
+              >
+                {testingPath ? <Loader2 size={12} className="animate-spin" /> : t('settings.testPath')}
+              </button>
+            </div>
+            <p className="text-[10px] text-white/20">{t('settings.receiptSavePathDesc')}</p>
+            {pathTestResult && (
+              <p className={`text-[10px] font-bold ${pathTestResult.success ? 'text-emerald-400' : 'text-red-400'}`}>
+                {pathTestResult.success ? t('settings.pathWritable') : (pathTestResult.error || t('settings.pathNotWritable'))}
+              </p>
+            )}
           </div>
           <button
             onClick={handleSave}

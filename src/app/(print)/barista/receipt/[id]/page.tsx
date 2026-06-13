@@ -55,6 +55,16 @@ export default function ReceiptPrintPage() {
     }
   }, [receipt])
 
+  // Auto-close after printing (user can still "Print Again" if needed)
+  useEffect(() => {
+    const handleAfterPrint = () => {
+      // Small delay so user can see the receipt before the window closes
+      setTimeout(() => window.close(), 300)
+    }
+    window.addEventListener('afterprint', handleAfterPrint)
+    return () => window.removeEventListener('afterprint', handleAfterPrint)
+  }, [])
+
   if (error) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', fontFamily: 'system-ui, sans-serif' }}>
@@ -272,7 +282,7 @@ export default function ReceiptPrintPage() {
 
         <div className="row">
           <span className="label">Payment</span>
-          <span className="val">{receipt.paymentMethod === 'CASH' ? 'Cash' : 'Card'}</span>
+          <span className="val">{receipt.paymentMethod}</span>
         </div>
 
         <hr className="divider" />
@@ -286,6 +296,9 @@ export default function ReceiptPrintPage() {
       </div>
 
       {/* Screen-only actions */}
+      {/* NOTE: Cash drawer kick requires raw ESC/POS commands via TCP port 9100.
+          This cannot be done via window.print(). If cash drawer kick is needed,
+          implement a local print server (see PRINTER_SETUP.md for future enhancement). */}
       <div className="screen-actions no-print">
         <button className="btn-print" onClick={() => window.print()}>Print Again</button>
         <button className="btn-close" onClick={() => window.close()}>Close</button>

@@ -7,6 +7,7 @@ import { getCapacityInfo } from '@/lib/capacity'
 import { autoExpireSubscriptions } from '@/lib/autoExpire'
 import { autoCheckoutExpired } from '@/lib/autoCheckout'
 import { verifyAuth } from '@/lib/auth'
+import { safeStudentResponse } from '@/lib/safeStudent'
 
 const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000
 
@@ -39,9 +40,17 @@ export async function POST(req: NextRequest) {
 
     const cleanRfid = rfidUuid ? sanitizeRfid(rfidUuid) : null
 
+    // SECURITY: select only what the check-in logic and kiosk UI need.
+    // This is a public endpoint — never fetch password, qrToken, rfidUuid, or PII.
     const student = await prisma.student.findUnique({
       where: studentId ? { id: Number(studentId) } : { rfidUuid: cleanRfid! },
-      include: {
+      select: {
+        id: true,
+        fullName: true,
+        studentNumber: true,
+        photoUrl: true,
+        status: true,
+        lifetimeCheckIns: true,
         subscriptions: {
           where: {
             OR: [
@@ -66,17 +75,17 @@ export async function POST(req: NextRequest) {
       return Response.json({
         status: student.status,
         reason: student.status === 'SUSPENDED' ? 'Account suspended. Please see the front desk.' : 'Access denied. Please see the front desk.',
-        student,
+        student: safeStudentResponse(student),
       }, { status: 403 })
     }
 
     const sub = student.subscriptions[0] ?? null
     if (!sub) {
-      return Response.json({ status: 'EXPIRED', reason: 'No active subscription found.', student })
+      return Response.json({ status: 'EXPIRED', reason: 'No active subscription found.', student: safeStudentResponse(student) })
     }
 
     if (sub.isFrozen) {
-      return Response.json({ status: 'EXPIRED', reason: 'Subscription is frozen.', student })
+      return Response.json({ status: 'EXPIRED', reason: 'Subscription is frozen.', student: safeStudentResponse(student) })
     }
 
     // Check if this subscription has an active 24h window (even if subscription was deactivated by autoExpire)
@@ -86,7 +95,7 @@ export async function POST(req: NextRequest) {
 
     // If subscription is deactivated AND no active window, block
     if (!sub.isActive && !hasActiveWindow) {
-      return Response.json({ status: 'EXPIRED', reason: 'Subscription has expired.', student })
+      return Response.json({ status: 'EXPIRED', reason: 'Subscription has expired.', student: safeStudentResponse(student) })
     }
 
     // If subscription is active, validate it fully (date window, entries, etc.)
@@ -97,7 +106,7 @@ export async function POST(req: NextRequest) {
         // Subscription failed validation, but check if there's still an active window
         if (!hasActiveWindow) {
           await prisma.subscription.update({ where: { id: sub.id }, data: { isActive: false } })
-          return Response.json({ status: 'EXPIRED', reason: check.reason, student })
+          return Response.json({ status: 'EXPIRED', reason: check.reason, student: safeStudentResponse(student) })
         }
         // Has active window — deactivate sub but allow the window to finish
         await prisma.subscription.update({ where: { id: sub.id }, data: { isActive: false } })
@@ -122,7 +131,7 @@ export async function POST(req: NextRequest) {
       return Response.json({
         status: 'ALREADY_IN',
         reason: 'Student is already checked in.',
-        student,
+        student: safeStudentResponse(student),
         subscription: sub,
         remainingVisits,
         logId: existingActiveLog.id,
@@ -136,7 +145,7 @@ export async function POST(req: NextRequest) {
       return Response.json({
         status: 'FULL',
         reason: `Venue is at full capacity (${capacity.maxCapacity}). Please try again later.`,
-        student,
+        student: safeStudentResponse(student),
         currentOccupancy: capacity.currentOccupancy,
         maxCapacity: capacity.maxCapacity,
       })
@@ -165,6 +174,7 @@ export async function POST(req: NextRequest) {
         const txStudent = await tx.student.update({
           where: { id: student.id },
           data: { lifetimeCheckIns: { increment: 1 } },
+          select: { id: true, fullName: true, studentNumber: true, photoUrl: true, status: true, lifetimeCheckIns: true },
         })
 
         return { duplicate: false, logId: log.id, updatedStudent: txStudent }
@@ -174,12 +184,12 @@ export async function POST(req: NextRequest) {
         const remainingVisits = sub.totalVisitsAllowed === -1 ? null : sub.totalVisitsAllowed - sub.visitsUsed
         return Response.json({
           status: 'ALREADY_IN', reason: 'Student is already checked in.',
-          student, subscription: sub, remainingVisits, logId: result.logId, alreadyCheckedInToday: true,
+          student: safeStudentResponse(student), subscription: sub, remainingVisits, logId: result.logId, alreadyCheckedInToday: true,
         })
       }
 
       const remainingVisits = sub.totalVisitsAllowed === -1 ? null : sub.totalVisitsAllowed - sub.visitsUsed
-      const windowResult = result as { duplicate: false; logId: number; updatedStudent: typeof student }
+      const windowResult = result as { duplicate: false; logId: number; updatedStudent: { id: number; fullName: string; studentNumber: number | null; photoUrl: string | null; status: string; lifetimeCheckIns: number } }
 
       // F9: Audit log for check-in
       await prisma.staffAuditLog.create({
@@ -187,14 +197,14 @@ export async function POST(req: NextRequest) {
           userId: staffUserId,
           email: staffUserId ? '' : 'kiosk',
           role: staffUserId ? '' : 'KIOSK',
-          event: 'CHECKIN' as any,
+          event: 'CHECKIN',
           details: `Checked in student ${student.fullName} (ID: ${student.id}) via ${method} [window reuse]`,
         },
       }).catch(() => {})
 
       return Response.json({
         status: 'OK',
-        student: windowResult.updatedStudent,
+        student: safeStudentResponse(windowResult.updatedStudent),
         subscription: sub,
         remainingVisits,
         logId: result.logId,
@@ -206,7 +216,7 @@ export async function POST(req: NextRequest) {
     // First check entries remaining (unless unlimited)
     if (sub.totalVisitsAllowed !== -1 && sub.visitsUsed >= sub.totalVisitsAllowed) {
       await prisma.subscription.update({ where: { id: sub.id }, data: { isActive: false } })
-      return Response.json({ status: 'EXPIRED', reason: 'All entries have been used.', student })
+      return Response.json({ status: 'EXPIRED', reason: 'All entries have been used.', student: safeStudentResponse(student) })
     }
 
     const result = await prisma.$transaction(async (tx) => {
@@ -247,6 +257,7 @@ export async function POST(req: NextRequest) {
       const txStudent = await tx.student.update({
         where: { id: student.id },
         data: { lifetimeCheckIns: { increment: 1 } },
+        select: { id: true, fullName: true, studentNumber: true, photoUrl: true, status: true, lifetimeCheckIns: true },
       })
 
       return { duplicate: false, logId: log.id, updatedSub: txSub, updatedStudent: txStudent }
@@ -256,11 +267,11 @@ export async function POST(req: NextRequest) {
       const remainingVisits = sub.totalVisitsAllowed === -1 ? null : sub.totalVisitsAllowed - sub.visitsUsed
       return Response.json({
         status: 'ALREADY_IN', reason: 'Student is already checked in.',
-        student, subscription: sub, remainingVisits, logId: result.logId, alreadyCheckedInToday: true,
+        student: safeStudentResponse(student), subscription: sub, remainingVisits, logId: result.logId, alreadyCheckedInToday: true,
       })
     }
 
-    const { updatedSub, updatedStudent } = result as { updatedSub: typeof sub; updatedStudent: typeof student; logId: number; duplicate: false }
+    const { updatedSub, updatedStudent } = result as { updatedSub: typeof sub; updatedStudent: { id: number; fullName: string; studentNumber: number | null; photoUrl: string | null; status: string; lifetimeCheckIns: number }; logId: number; duplicate: false }
     const remainingVisits = updatedSub.totalVisitsAllowed === -1
       ? null
       : updatedSub.totalVisitsAllowed - updatedSub.visitsUsed
@@ -271,14 +282,14 @@ export async function POST(req: NextRequest) {
         userId: staffUserId,
         email: staffUserId ? '' : 'kiosk',
         role: staffUserId ? '' : 'KIOSK',
-        event: 'CHECKIN' as any,
+        event: 'CHECKIN',
         details: `Checked in student ${student.fullName} (ID: ${student.id}) via ${method} [new window, entry deducted]`,
       },
     }).catch(() => {})
 
     return Response.json({
       status: 'OK',
-      student: updatedStudent,
+      student: safeStudentResponse(updatedStudent),
       subscription: updatedSub,
       remainingVisits,
       logId: result.logId,

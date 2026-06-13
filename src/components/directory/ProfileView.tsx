@@ -1,6 +1,6 @@
 ﻿'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { ArrowLeft, CreditCard, RefreshCw, Loader2, User, Phone, BookOpen, Activity, Calendar, Hash, CheckCircle, XCircle, Trash2, AlertTriangle, Edit3, Save, Plus, Minus, Camera, Snowflake, QrCode, StickyNote, Send, X, Coffee, LogIn, LogOut, Clock } from 'lucide-react'
+import { ArrowLeft, CreditCard, RefreshCw, Loader2, User, Phone, BookOpen, Activity, Calendar, Hash, CheckCircle, XCircle, Trash2, AlertTriangle, Edit3, Save, Plus, Minus, Camera, Snowflake, QrCode, StickyNote, Send, X, Coffee, LogIn, LogOut, Clock, KeyRound, Eye, EyeOff } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { RenewModal } from './RenewModal'
@@ -39,6 +39,9 @@ interface Student {
   emergencyPhone?: string
   referralSource?: string
   status?: string
+  hasPassword?: boolean
+  isLoginEnabled?: boolean
+  lastLoginAt?: string | null
   lifetimeCheckIns: number
   createdAt: string
   subscriptions: Subscription[]
@@ -98,6 +101,16 @@ export function ProfileView({ studentId, onBack }: ProfileViewProps) {
   // QR modal state
   const [qrOpen, setQrOpen] = useState(false)
   const [qrEnabled, setQrEnabled] = useState(false)
+
+  // Customer login management state
+  const [showResetPw, setShowResetPw] = useState(false)
+  const [resetPw, setResetPw] = useState('')
+  const [resetPwConfirm, setResetPwConfirm] = useState('')
+  const [resetPwLoading, setResetPwLoading] = useState(false)
+  const [resetPwMsg, setResetPwMsg] = useState('')
+  const [resetPwError, setResetPwError] = useState('')
+  const [togglingLogin, setTogglingLogin] = useState(false)
+  const [userRole, setUserRole] = useState<string | null>(null)
 
   // Barista orders state
   const [baristaOrders, setBaristaOrders] = useState<BaristaOrderItem[]>([])
@@ -272,6 +285,11 @@ export function ProfileView({ studentId, onBack }: ProfileViewProps) {
       .catch(() => {})
   }, [studentId])
 
+  // Fetch current user role for permission checks
+  useEffect(() => {
+    fetch('/api/auth/me').then(r => r.json()).then(d => { if (d.user) setUserRole(d.user.role) }).catch(() => {})
+  }, [])
+
   // Check if QR codes are enabled
   useEffect(() => {
     fetch('/api/settings')
@@ -341,6 +359,43 @@ export function ProfileView({ studentId, onBack }: ProfileViewProps) {
     if (res.ok) setNotes(prev => prev.filter(n => n.id !== noteId))
   }
 
+  const handleResetPassword = async () => {
+    if (!resetPw || resetPw.length < 6) { setResetPwError(t('customer.passwordTooShort')); return }
+    if (resetPw !== resetPwConfirm) { setResetPwError(t('customer.passwordsMismatch')); return }
+    setResetPwLoading(true)
+    setResetPwError('')
+    setResetPwMsg('')
+    try {
+      const res = await fetch('/api/auth/customer/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ studentId: studentId, newPassword: resetPw }),
+      })
+      if (res.ok) {
+        setResetPwMsg(t('profile.passwordResetSuccess'))
+        setResetPw('')
+        setResetPwConfirm('')
+        setShowResetPw(false)
+        fetchStudent()
+      } else {
+        const data = await res.json().catch(() => ({}))
+        setResetPwError(data.error || 'Failed')
+      }
+    } catch { setResetPwError('Failed') } finally { setResetPwLoading(false) }
+  }
+
+  const handleToggleLogin = async (enabled: boolean) => {
+    setTogglingLogin(true)
+    try {
+      await fetch(`/api/students/${studentId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isLoginEnabled: enabled }),
+      })
+      fetchStudent()
+    } catch {} finally { setTogglingLogin(false) }
+  }
+
   const handleStartEdit = () => {
     if (!student) return
     setEditName(student.fullName)
@@ -389,31 +444,31 @@ export function ProfileView({ studentId, onBack }: ProfileViewProps) {
     : 0
 
   return (
-    <div className="flex flex-col h-full overflow-auto p-6 gap-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <button onClick={onBack} className="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-white/50 hover:bg-white/10 hover:text-white transition-colors">
+    <div className="flex flex-col h-full overflow-auto p-3 md:p-6 gap-4 md:gap-6">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div className="flex items-center gap-3 md:gap-4 min-w-0">
+          <button onClick={onBack} className="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-white/50 hover:bg-white/10 hover:text-white transition-colors shrink-0">
             <ArrowLeft size={20} />
           </button>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-wrap">
             {editingProfile ? (
               <input value={editName} onChange={(e) => setEditName(e.target.value)}
-                className="text-3xl font-black text-white tracking-tight bg-transparent border-b-2 border-[#F5C518] outline-none w-64" autoFocus />
+                className="text-xl md:text-3xl font-black text-white tracking-tight bg-transparent border-b-2 border-[#F5C518] outline-none w-full md:w-64" autoFocus />
             ) : (
-              <h1 className="text-3xl font-black text-white tracking-tight">{student.fullName}</h1>
+              <h1 className="text-xl md:text-3xl font-black text-white tracking-tight truncate">{student.fullName}</h1>
             )}
             {activeSub ? (
-              <span className="px-3 py-1 bg-green-500/10 text-green-400 border border-green-500/20 rounded-md text-[11px] font-bold uppercase tracking-widest flex items-center gap-1.5">
+              <span className="px-2 md:px-3 py-1 bg-green-500/10 text-green-400 border border-green-500/20 rounded-md text-[10px] md:text-[11px] font-bold uppercase tracking-widest flex items-center gap-1 shrink-0">
                 <CheckCircle size={12} className="text-green-400" /> {t('profile.active')}
               </span>
             ) : (
-              <span className="px-3 py-1 bg-red-500/10 text-red-400 border border-red-500/20 rounded-md text-[11px] font-bold uppercase tracking-widest flex items-center gap-1.5">
+              <span className="px-2 md:px-3 py-1 bg-red-500/10 text-red-400 border border-red-500/20 rounded-md text-[10px] md:text-[11px] font-bold uppercase tracking-widest flex items-center gap-1 shrink-0">
                 <XCircle size={12} className="text-red-400" /> {t('profile.expired')}
               </span>
             )}
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {/* Check In / Check Out button */}
           {!editingProfile && (
             checkInStatus.checkedIn ? (
@@ -475,7 +530,7 @@ export function ProfileView({ studentId, onBack }: ProfileViewProps) {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
         {/* Info card */}
         <div className="hive-card !rounded-2xl relative overflow-hidden group">
           <div className="absolute top-0 right-0 w-32 h-32 bg-yellow-500/100/5 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none" />
@@ -812,6 +867,108 @@ export function ProfileView({ studentId, onBack }: ProfileViewProps) {
           )}
         </div>
       </div>
+
+      {/* Customer Login Management — ADMIN & MANAGER only */}
+      {(userRole === 'ADMIN' || userRole === 'MANAGER') && (
+        <div className="border border-white/8 rounded-2xl p-6" style={{ background: 'rgba(255,255,255,0.04)' }}>
+          <h2 className="text-[11px] font-bold text-white/40 uppercase tracking-widest mb-5 flex items-center gap-2">
+            <KeyRound size={14} className="text-[#F5C518]" />
+            {t('profile.customerLogin')}
+          </h2>
+
+          <div className="space-y-4">
+            {/* Status indicators */}
+            <div className="flex flex-wrap gap-3">
+              <span className={`text-xs font-bold px-3 py-1.5 rounded-lg border ${
+                student.hasPassword
+                  ? 'bg-green-500/10 text-green-400 border-green-500/20'
+                  : 'bg-white/5 text-white/30 border-white/10'
+              }`}>
+                {student.hasPassword ? t('profile.passwordSet') + ' ✓' : t('profile.passwordNotSet')}
+              </span>
+              <span className="text-xs text-white/30 flex items-center gap-1.5">
+                <Clock size={12} />
+                {t('profile.lastLogin')}: {student.lastLoginAt
+                  ? (() => {
+                      const days = Math.floor((Date.now() - new Date(student.lastLoginAt).getTime()) / 86400000)
+                      return days === 0 ? t('profile.today') : days === 1 ? t('profile.yesterday') : `${days}${t('profile.daysAgo')}`
+                    })()
+                  : t('profile.neverLoggedIn')
+                }
+              </span>
+            </div>
+
+            {/* Login enabled toggle */}
+            <div className="flex items-center justify-between p-3 rounded-xl bg-white/3 border border-white/8">
+              <span className="text-sm font-medium text-white/60">{t('profile.loginEnabled')}</span>
+              <button
+                onClick={() => handleToggleLogin(!student.isLoginEnabled)}
+                disabled={togglingLogin}
+                className={`relative w-11 h-6 rounded-full transition-all duration-200 ${
+                  student.isLoginEnabled ? 'bg-green-500' : 'bg-white/10'
+                } ${togglingLogin ? 'opacity-50' : ''}`}
+              >
+                <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all duration-200 ${
+                  student.isLoginEnabled ? 'left-[22px]' : 'left-0.5'
+                }`} />
+              </button>
+            </div>
+
+            {/* Reset/Set password */}
+            {resetPwMsg && (
+              <div className="flex items-center gap-2 text-green-400 text-xs bg-green-500/10 rounded-lg p-3 border border-green-500/20">
+                <CheckCircle size={14} /> {resetPwMsg}
+              </div>
+            )}
+
+            {!showResetPw ? (
+              <button
+                onClick={() => { setShowResetPw(true); setResetPwMsg(''); setResetPwError('') }}
+                className="w-full py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 bg-white/5 border border-white/10 text-white/50 hover:text-white hover:bg-white/10 transition-all"
+              >
+                <KeyRound size={14} />
+                {student.hasPassword ? t('profile.resetPassword') : t('profile.setPassword')}
+              </button>
+            ) : (
+              <div className="p-4 rounded-xl space-y-3" style={{ background: 'rgba(245, 197, 24, 0.05)', border: '1px solid rgba(245, 197, 24, 0.15)' }}>
+                <div>
+                  <label className="text-[10px] font-bold text-white/30 uppercase tracking-wider">{t('profile.newPassword')}</label>
+                  <input
+                    type="password"
+                    value={resetPw}
+                    onChange={e => setResetPw(e.target.value)}
+                    placeholder={t('profile.minChars')}
+                    className="w-full mt-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white focus:border-[#F5C518] outline-none placeholder:text-white/20"
+                    autoFocus
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-white/30 uppercase tracking-wider">{t('profile.confirmPassword')}</label>
+                  <input
+                    type="password"
+                    value={resetPwConfirm}
+                    onChange={e => setResetPwConfirm(e.target.value)}
+                    placeholder={t('profile.reenterPassword')}
+                    className="w-full mt-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white focus:border-[#F5C518] outline-none placeholder:text-white/20"
+                  />
+                </div>
+                {resetPwError && (
+                  <p className="text-xs text-red-400 bg-red-500/10 rounded-lg p-2 border border-red-500/20">{resetPwError}</p>
+                )}
+                <div className="flex gap-2">
+                  <button onClick={() => { setShowResetPw(false); setResetPw(''); setResetPwConfirm(''); setResetPwError('') }}
+                    className="flex-1 px-3 py-2.5 rounded-lg bg-white/5 border border-white/10 text-white/40 text-xs font-medium hover:bg-white/10 transition-all">{t('common.cancel')}</button>
+                  <button onClick={handleResetPassword} disabled={resetPwLoading}
+                    className="flex-1 px-3 py-2.5 rounded-lg bg-[#F5C518] hover:bg-[#D5A711] text-black text-xs font-bold transition-all disabled:opacity-40 flex items-center justify-center gap-1.5">
+                    {resetPwLoading ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+                    {student.hasPassword ? t('profile.resetPassword') : t('profile.setPassword')}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Barista Purchase History */}
       {baristaOrders.length > 0 && (

@@ -663,10 +663,12 @@ export default function BaristaPage() {
 
       {/* ═══════════════════════ POS TAB ═══════════════════════ */}
       {tab === 'pos' && (
-        <div className="grid grid-cols-12 gap-4" style={{ minHeight: 'calc(100vh - 240px)' }}>
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4" style={{ minHeight: 'calc(100vh - 240px)' }}>
 
-          {/* ── LEFT: Category Sidebar ── */}
-          <div className="col-span-2 space-y-1.5">
+          {/* ── Category tabs (mobile: horizontal scroll) / sidebar (desktop: vertical) ── */}
+          <div className="lg:col-span-2">
+            {/* Desktop: vertical sidebar */}
+            <div className="hidden lg:block space-y-1.5">
             <button
               onClick={() => setSelectedCategoryId('all')}
               className={`w-full text-left px-3 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${
@@ -708,11 +710,35 @@ export default function BaristaPage() {
                 <div className="text-[10px] text-white/20 mt-0.5">{orders.length} {t('barista.totalOrders')}</div>
               </div>
             </div>
+            </div>
+
+            {/* Mobile: horizontal scrolling category tabs */}
+            <div className="lg:hidden flex gap-2 overflow-x-auto pb-2 -mx-1 px-1">
+              <button
+                onClick={() => setSelectedCategoryId('all')}
+                className={`shrink-0 px-3 py-2 rounded-lg text-xs font-bold transition-all ${
+                  selectedCategoryId === 'all' ? 'bg-[#F5C518] text-black' : 'bg-white/5 text-white/50'
+                }`}
+              >
+                {t('barista.allCategories')}
+              </button>
+              {categories.filter(c => c.isActive).map(cat => (
+                <button
+                  key={cat.id}
+                  onClick={() => setSelectedCategoryId(cat.id)}
+                  className={`shrink-0 px-3 py-2 rounded-lg text-xs font-bold transition-all ${
+                    selectedCategoryId === cat.id ? 'bg-[#F5C518] text-black' : 'bg-white/5 text-white/50'
+                  }`}
+                >
+                  {lang === 'ar' && cat.nameAr ? cat.nameAr : cat.name}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* ── CENTER: Items Grid ── */}
-          <div className="col-span-7">
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+          <div className="lg:col-span-7">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 md:gap-3">
               {filteredItems.map(item => (
                 <div key={item.id} className="group relative flex flex-col h-full">
                   <button
@@ -803,8 +829,23 @@ export default function BaristaPage() {
             </div>
           </div>
 
-          {/* ── RIGHT: Cart ── */}
-          <div className="col-span-3">
+          {/* ── Mobile: Floating cart button ── */}
+          {cart.length > 0 && (
+            <div className="lg:hidden fixed bottom-20 right-4 z-40">
+              <button
+                onClick={() => setShowCheckout(true)}
+                className="flex items-center gap-2 px-5 py-3.5 rounded-full bg-[#F5C518] text-black font-bold text-sm shadow-[0_4px_20px_rgba(245,197,24,0.4)] active:scale-95 transition-all"
+              >
+                <ShoppingCart size={18} />
+                <span>{cartCount}</span>
+                <span className="text-xs opacity-80">•</span>
+                <span>{cartTotal.toFixed(2)} JD</span>
+              </button>
+            </div>
+          )}
+
+          {/* ── RIGHT: Cart (desktop only) ── */}
+          <div className="hidden lg:block lg:col-span-3">
             <div className="hive-card !rounded-2xl !p-0 overflow-hidden sticky top-4">
               {/* Cart Header */}
               <div className="flex items-center justify-between px-4 py-3 border-b border-white/5">

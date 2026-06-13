@@ -68,7 +68,7 @@ export async function autoCheckoutExpired(): Promise<{
         data: {
           email: 'system',
           role: 'SYSTEM',
-          event: 'AUTO_CHECKOUT' as any,
+          event: 'AUTO_CHECKOUT',
           details: `Auto-checkout: student ${sub.student.fullName} (ID: ${sub.studentId}) — 24h window expired`,
         },
       }).catch(() => {})
@@ -108,7 +108,7 @@ export async function autoCheckoutExpired(): Promise<{
         data: {
           email: 'system',
           role: 'SYSTEM',
-          event: 'AUTO_CHECKOUT' as any,
+          event: 'AUTO_CHECKOUT',
           details: `Auto-checkout (orphaned): student ${log.student.fullName} (ID: ${log.studentId}) — checkIn > 24h ago`,
         },
       }).catch(() => {})
@@ -144,7 +144,7 @@ export async function autoCheckoutAll(staffUserId?: number): Promise<number> {
         userId: staffUserId ?? null,
         email: staffUserId ? '' : 'system',
         role: staffUserId ? '' : 'SYSTEM',
-        event: 'BULK_CHECKOUT' as any,
+        event: 'BULK_CHECKOUT',
         details: `Manual bulk checkout: ${result.count} student(s) checked out, all windows cleared`,
       },
     }).catch(() => {})

@@ -59,6 +59,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       where: { userId: Number(id), event: 'LOGIN' },
       select: { createdAt: true },
       orderBy: { createdAt: 'desc' },
+      take: 2000,
     })
 
     // Group by YYYY-MM → Set of day numbers
@@ -127,7 +128,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     }
 
     // Allow role changes (ADMIN only)
-    const validRoles = ['ADMIN', 'MANAGER', 'STAFF']
+    const validRoles = ['ADMIN', 'MANAGER', 'STAFF', 'BARISTA']
     if (typeof body.role === 'string' && validRoles.includes(body.role) && body.role !== user.role) {
       // Prevent admin from demoting themselves
       if (user.id === (session.userId as number)) {
@@ -153,7 +154,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     // Allow updating permissions for MANAGER role
     const targetRole = (updateData.role as string) || user.role
     if (Array.isArray(body.permissions) && targetRole === 'MANAGER') {
-      const validPages = ['/', '/directory', '/logs', '/stats', '/barista', '/admin']
+      const validPages = ['/', '/directory', '/logs', '/stats', '/barista', '/orders', '/feedback', '/admin']
       const filtered = body.permissions.filter((p: string) => validPages.includes(p))
       updateData.permissions = JSON.stringify(filtered)
     }

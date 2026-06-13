@@ -2,12 +2,16 @@ import { NextRequest } from 'next/server'
 import prisma from '@/lib/prisma'
 import { requireAuth } from '@/lib/authGuard'
 import { isValidId } from '@/lib/sanitize'
+import { checkStaffRateLimit } from '@/lib/rateLimit'
 
 // DELETE a single barista order — also reverses cash register update (fix #7)
 export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
-    const session = await requireAuth('ADMIN', 'STAFF')
+    const session = await requireAuth('ADMIN', 'MANAGER', 'STAFF', 'BARISTA')
     if (session instanceof Response) return session
+
+    const rl = checkStaffRateLimit(session.userId as number, 'write')
+    if (rl.limited) return Response.json({ error: 'Rate limit exceeded' }, { status: 429 })
 
     const { id } = await ctx.params
     if (!isValidId(id)) return Response.json({ error: 'Invalid order ID' }, { status: 400 })
@@ -37,9 +41,9 @@ export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: str
     })
 
     return Response.json({ ok: true })
-  } catch (e: any) {
+  } catch (e) {
     console.error('[DELETE /api/barista/orders/[id]]', e)
-    if (e?.code === 'P2025') return Response.json({ error: 'Order not found' }, { status: 404 })
+    if (e instanceof Error && 'code' in e && (e as { code: string }).code === 'P2025') return Response.json({ error: 'Order not found' }, { status: 404 })
     return Response.json({ error: 'Failed to delete order' }, { status: 500 })
   }
 }

@@ -11,6 +11,7 @@ export interface ReceiptData {
   discount: number
   expiryDate: string
   receiptNumber?: string // linked receipt number for printing
+  transactionId?: number // transaction ID for subscription receipt print page
 }
 
 interface ReceiptModalProps {
@@ -24,8 +25,13 @@ export function ReceiptModal({ open, onClose, data }: ReceiptModalProps) {
   if (!data) return null
 
   const handlePrint = async () => {
+    if (data.transactionId) {
+      // Open the subscription receipt print page by transaction ID
+      window.open(`/subscription/receipt/${data.transactionId}`, '_blank')
+      return
+    }
     if (data.receiptNumber) {
-      // Open the unified receipt print page
+      // Fallback: open the unified receipt print page by receipt number
       window.open(`/barista/receipt/${data.receiptNumber}`, '_blank')
       return
     }

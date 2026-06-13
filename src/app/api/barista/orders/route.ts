@@ -2,11 +2,16 @@ import prisma from '@/lib/prisma'
 import { requireAuth } from '@/lib/authGuard'
 import { isValidId } from '@/lib/sanitize'
 import { todayString } from '@/lib/subscriptionLogic'
+import { generateReceiptNumber } from '@/lib/receiptNumber'
+import { checkStaffRateLimit } from '@/lib/rateLimit'
 
 export async function GET() {
   try {
-    const session = await requireAuth('ADMIN', 'STAFF')
+    const session = await requireAuth('ADMIN', 'MANAGER', 'STAFF', 'BARISTA')
     if (session instanceof Response) return session
+
+    const rl = checkStaffRateLimit(session.userId as number, 'read')
+    if (rl.limited) return Response.json({ error: 'Rate limit exceeded' }, { status: 429 })
 
     // Limit to last 200 orders to avoid unbounded query (issue #13)
     const today = new Date(`${todayString()}T00:00:00`)
@@ -22,24 +27,13 @@ export async function GET() {
   }
 }
 
-// Helper: generate receipt number atomically inside a transaction
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function generateReceiptNumber(tx: any) {
-  const setting = await tx.appSetting.findUnique({ where: { key: 'nextReceiptNumber' } })
-  const nextNum = setting ? parseInt(setting.value) : 1
-  const receiptNumber = `RCP-${String(nextNum).padStart(5, '0')}`
-  await tx.appSetting.upsert({
-    where: { key: 'nextReceiptNumber' },
-    create: { key: 'nextReceiptNumber', value: String(nextNum + 1) },
-    update: { value: String(nextNum + 1) },
-  })
-  return receiptNumber
-}
-
 export async function POST(req: Request) {
   try {
-    const session = await requireAuth('ADMIN', 'STAFF')
+    const session = await requireAuth('ADMIN', 'MANAGER', 'STAFF', 'BARISTA')
     if (session instanceof Response) return session
+
+    const rl = checkStaffRateLimit(session.userId as number, 'write')
+    if (rl.limited) return Response.json({ error: 'Rate limit exceeded' }, { status: 429 })
 
     const body = await req.json().catch(() => null)
     if (!body) return Response.json({ error: 'Invalid request body' }, { status: 400 })
@@ -72,6 +66,18 @@ export async function POST(req: Request) {
         qty: number
       }> = []
 
+      // Batch fetch all regular menu items in one query (avoids N+1)
+      const regularMenuItemIds: number[] = [...new Set(
+        (body.items as Array<{ customName?: string; menuItemId?: number }>)
+          .filter(i => !i.customName || (i.menuItemId && Number(i.menuItemId) > 0))
+          .map(i => parseInt(String(i.menuItemId)))
+          .filter(id => !isNaN(id) && id > 0)
+      )]
+      const batchMenuItems = regularMenuItemIds.length > 0
+        ? await prisma.menuItem.findMany({ where: { id: { in: regularMenuItemIds } } })
+        : []
+      const menuItemMap = new Map(batchMenuItems.map(mi => [mi.id, mi]))
+
       for (const item of body.items) {
         const { menuItemId, quantity, selectedOptions, finalPrice, totalPrice, customName, customCostPrice } = item
 
@@ -84,14 +90,13 @@ export async function POST(req: Request) {
 
         // Handle custom items (negative or missing menuItemId with customName)
         if (customName && (!menuItemId || Number(menuItemId) < 0)) {
-          // Create a temporary menu item for the custom entry
           const customItem = await prisma.menuItem.create({
             data: {
               name: String(customName).trim().slice(0, 100),
               price: parseFloat(totalPrice) || parseFloat(String(finalPrice)) || 0,
               costPrice: parseFloat(String(customCostPrice)) || 0,
               isOutOfStock: true,
-              isCustom: true, // flag as ad-hoc item so it's hidden from regular menu
+              isCustom: true,
             },
           })
           resolvedMenuItemId = customItem.id
@@ -99,7 +104,7 @@ export async function POST(req: Request) {
           orderCostPrice = customItem.costPrice * qty
         } else {
           if (!menuItemId || !isValidId(menuItemId)) continue
-          const menuItem = await prisma.menuItem.findUnique({ where: { id: parseInt(String(menuItemId)) } })
+          const menuItem = menuItemMap.get(parseInt(String(menuItemId)))
           if (!menuItem) continue
           resolvedMenuItemId = menuItem.id
           basePrice = parseFloat(totalPrice) || menuItem.price * qty

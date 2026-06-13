@@ -79,7 +79,6 @@ export async function POST(req: Request) {
       },
     })
 
-    console.log(`[AUDIT] PASSWORD_RESET: admin=${adminEmail} target=${targetUser.email} self=${isSelf} ip=${ip}`)
 
     return Response.json({
       message: `Password reset successfully for ${targetUser.email}`,

@@ -1,5 +1,6 @@
 import prisma from '@/lib/prisma'
 import { requireAuth } from '@/lib/authGuard'
+import { checkStaffRateLimit } from '@/lib/rateLimit'
 
 // GET — lightweight dashboard stats (accessible to all authenticated roles)
 // Returns: active subscription count, expiring-soon students, today's occupancy
@@ -8,6 +9,9 @@ export async function GET() {
   try {
     const session = await requireAuth('ADMIN', 'STAFF', 'MANAGER')
     if (session instanceof Response) return session
+
+    const rl = checkStaffRateLimit(session.userId as number, 'read')
+    if (rl.limited) return Response.json({ error: 'Rate limit exceeded' }, { status: 429 })
 
     const now = new Date()
     const threeDaysFromNow = new Date(now.getTime() + 3 * 86400000)

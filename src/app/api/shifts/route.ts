@@ -2,12 +2,16 @@ import { NextRequest } from 'next/server'
 import prisma from '@/lib/prisma'
 import { requireAuth } from '@/lib/authGuard'
 import { todayString } from '@/lib/subscriptionLogic'
+import { checkStaffRateLimit } from '@/lib/rateLimit'
 
 // GET — list shifts (admin: all, others: own)
 export async function GET(req: NextRequest) {
   try {
     const session = await requireAuth('ADMIN', 'MANAGER', 'STAFF')
     if (session instanceof Response) return session
+
+    const rl = checkStaffRateLimit(session.userId as number, 'read')
+    if (rl.limited) return Response.json({ error: 'Rate limit exceeded' }, { status: 429 })
 
     const { searchParams } = new URL(req.url)
     const date = searchParams.get('date') || todayString()
@@ -34,6 +38,9 @@ export async function POST(req: NextRequest) {
   try {
     const session = await requireAuth('ADMIN', 'MANAGER', 'STAFF')
     if (session instanceof Response) return session
+
+    const rl = checkStaffRateLimit(session.userId as number, 'write')
+    if (rl.limited) return Response.json({ error: 'Rate limit exceeded' }, { status: 429 })
 
     const today = todayString()
 
@@ -63,6 +70,9 @@ export async function PATCH() {
   try {
     const session = await requireAuth('ADMIN', 'MANAGER', 'STAFF')
     if (session instanceof Response) return session
+
+    const rl = checkStaffRateLimit(session.userId as number, 'write')
+    if (rl.limited) return Response.json({ error: 'Rate limit exceeded' }, { status: 429 })
 
     const today = todayString()
     const openShift = await prisma.staffShift.findFirst({

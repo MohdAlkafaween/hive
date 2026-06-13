@@ -1,34 +1,37 @@
 'use client'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ScanLine, CheckCircle2, XCircle, AlertTriangle, ArrowLeft, Search, User, Calendar, CreditCard, Clock, Loader2, Globe, QrCode, Camera } from 'lucide-react'
+import { ScanLine, CheckCircle2, XCircle, AlertTriangle, ArrowLeft, Search, User, CreditCard, Loader2, Globe, QrCode, Camera } from 'lucide-react'
 import Link from 'next/link'
 import { useI18n } from '@/lib/i18n'
 
 type ScanStatus = 'idle' | 'scanning' | 'success' | 'warning' | 'error'
 type TabMode = 'rfid' | 'search' | 'qr'
 
-interface Subscription {
-  id: number
-  planType: string
-  startDate: string
-  expiryDate: string
-  visitsUsed: number
-  totalVisitsAllowed: number
-  isActive: boolean
-}
-
+// Shape returned by the public /api/checkin/search endpoint (minimal by design —
+// the kiosk is unauthenticated, so no phone/PII/subscription internals are exposed)
 interface StudentResult {
   id: number
   fullName: string
-  phone: string
-  major: string | null
-  lifetimeCheckIns: number
-  subscriptions: Subscription[]
+  photoUrl: string | null
+  hasActiveSubscription: boolean
+  planType: string | null
 }
 
 export default function CheckInPage() {
   const { t, lang, setLang, dir } = useI18n()
+
+  // --- Kiosk enabled check ---
+  const [kioskDisabled, setKioskDisabled] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    fetch('/api/settings/public')
+      .then(r => r.ok ? r.json() : {})
+      .then((s: Record<string, string>) => {
+        setKioskDisabled(s.kioskEnabled !== 'true')
+      })
+      .catch(() => setKioskDisabled(false)) // default allow on error
+  }, [])
 
   // --- RFID state ---
   const [rfid, setRfid] = useState('')
@@ -47,6 +50,25 @@ export default function CheckInPage() {
 
   // --- Tab state ---
   const [tab, setTab] = useState<TabMode>('search')
+
+  // Show disabled message if kiosk is off
+  if (kioskDisabled === null) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: '#0A0A0A' }}>
+        <Loader2 className="w-8 h-8 text-[#F5C518] animate-spin" />
+      </div>
+    )
+  }
+
+  if (kioskDisabled) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4 text-center px-6" style={{ background: '#0A0A0A' }}>
+        <ScanLine className="w-16 h-16 text-white/20" />
+        <h1 className="text-xl font-bold text-white/60">{t('admin.kioskDisabledTitle')}</h1>
+        <p className="text-white/30 text-sm max-w-md">{t('admin.kioskDisabledMsg')}</p>
+      </div>
+    )
+  }
 
   // --- Search state ---
   const [query, setQuery] = useState('')
@@ -347,19 +369,9 @@ export default function CheckInPage() {
   }, [tab, t])
 
   // --- Helpers ---
-  function getSubStatus(student: StudentResult): { label: string; color: string; daysLeft: number | null; visitsLeft: number | null; planType: string | null } {
-    const sub = student.subscriptions[0]
-    if (!sub) return { label: t('kiosk.noSubscription'), color: 'red', daysLeft: null, visitsLeft: null, planType: null }
-
-    const now = new Date()
-    const expiry = new Date(sub.expiryDate)
-    const daysLeft = Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
-    const visitsLeft = sub.planType === 'Daily' ? null : sub.totalVisitsAllowed - sub.visitsUsed
-
-    if (daysLeft <= 0) return { label: t('kiosk.expired'), color: 'red', daysLeft: 0, visitsLeft, planType: sub.planType }
-    if (visitsLeft !== null && visitsLeft <= 0) return { label: t('kiosk.visitsUsedUp'), color: 'red', daysLeft, visitsLeft: 0, planType: sub.planType }
-    if (daysLeft <= 2 || (visitsLeft !== null && visitsLeft <= 2)) return { label: t('kiosk.expiringSoonLabel'), color: 'yellow', daysLeft, visitsLeft, planType: sub.planType }
-    return { label: t('kiosk.active'), color: 'green', daysLeft, visitsLeft, planType: sub.planType }
+  function getSubStatus(student: StudentResult): { label: string; color: string; planType: string | null } {
+    if (!student.hasActiveSubscription) return { label: t('kiosk.noSubscription'), color: 'red', planType: null }
+    return { label: t('kiosk.active'), color: 'green', planType: student.planType }
   }
 
   return (
@@ -491,14 +503,17 @@ export default function CheckInPage() {
                     {/* Student Info */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-3 mb-2">
-                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#F5C518] to-[#D4A516] flex items-center justify-center flex-shrink-0">
-                          <span className="text-black font-bold text-sm">
-                            {student.fullName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
-                          </span>
-                        </div>
+                        {student.photoUrl ? (
+                          <img src={student.photoUrl} alt="" className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
+                        ) : (
+                          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#F5C518] to-[#D4A516] flex items-center justify-center flex-shrink-0">
+                            <span className="text-black font-bold text-sm">
+                              {student.fullName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
+                            </span>
+                          </div>
+                        )}
                         <div className="min-w-0">
                           <h3 className="font-bold text-[#171717] text-lg truncate">{student.fullName}</h3>
-                          <p className="text-sm text-[#737373]">{student.phone}{student.major ? ` · ${student.major}` : ''}</p>
                         </div>
                       </div>
 
@@ -526,34 +541,6 @@ export default function CheckInPage() {
                           </span>
                         )}
 
-                        {/* Days Left */}
-                        {sub.daysLeft !== null && sub.daysLeft > 0 && (
-                          <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${
-                            sub.daysLeft <= 2 ? 'bg-red-50 text-red-600' :
-                            sub.daysLeft <= 5 ? 'bg-yellow-50 text-yellow-600' :
-                            'bg-blue-50 text-blue-600'
-                          }`}>
-                            <Calendar size={12} />
-                            {sub.daysLeft} {sub.daysLeft === 1 ? t('kiosk.dayLeft') : t('kiosk.daysLeft')}
-                          </span>
-                        )}
-
-                        {/* Visits Left */}
-                        {sub.visitsLeft !== null && (
-                          <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${
-                            sub.visitsLeft <= 2 ? 'bg-red-50 text-red-600' :
-                            sub.visitsLeft <= 4 ? 'bg-yellow-50 text-yellow-600' :
-                            'bg-emerald-50 text-emerald-600'
-                          }`}>
-                            <Clock size={12} />
-                            {sub.visitsLeft} {sub.visitsLeft === 1 ? t('kiosk.visitLeft') : t('kiosk.visitsLeft')}
-                          </span>
-                        )}
-
-                        {/* Lifetime check-ins */}
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-[#F5F5F5] text-[#737373]">
-                          {student.lifetimeCheckIns} {t('kiosk.totalVisits')}
-                        </span>
                       </div>
 
                       {/* Check-in result message */}

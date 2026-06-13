@@ -27,7 +27,7 @@ export function Modal({ open, onClose, title, children, maxWidth = 'max-w-md' }:
       {open && (
         <div className="fixed inset-0 z-[200] overflow-y-auto">
           <div
-            className="flex min-h-full items-center justify-center p-4"
+            className="flex min-h-full items-center justify-center p-0 md:p-4"
             onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
           >
             <motion.div
@@ -38,7 +38,7 @@ export function Modal({ open, onClose, title, children, maxWidth = 'max-w-md' }:
               transition={{ duration: 0.2 }}
             />
             <motion.div
-              className={`relative z-10 w-full ${maxWidth} bg-[#18181B] border border-[#27272A] rounded-2xl shadow-2xl`}
+              className={`relative z-10 w-full ${maxWidth} bg-[#18181B] border border-[#27272A] rounded-none md:rounded-2xl shadow-2xl max-md:min-h-screen max-md:max-w-full max-md:m-0`}
               initial={{ opacity: 0, scale: 0.93, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.93, y: 20 }}

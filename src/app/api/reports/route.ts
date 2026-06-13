@@ -1,12 +1,17 @@
 import { NextRequest } from 'next/server'
 import prisma from '@/lib/prisma'
 import { requireAuth } from '@/lib/authGuard'
+import { checkStaffRateLimit } from '@/lib/rateLimit'
+import { toLocalDateString } from '@/lib/subscriptionLogic'
 
 // GET — monthly financial report
 export async function GET(req: NextRequest) {
   try {
-    const session = await requireAuth('ADMIN')
+    const session = await requireAuth('ADMIN', 'MANAGER')
     if (session instanceof Response) return session
+
+    const rl = checkStaffRateLimit(session.userId as number, 'read')
+    if (rl.limited) return Response.json({ error: 'Rate limit exceeded' }, { status: 429 })
 
     const { searchParams } = new URL(req.url)
     // Support both ?month=2026-05 (YYYY-MM) and ?year=2026&month=5
@@ -87,20 +92,24 @@ export async function GET(req: NextRequest) {
         where: { checkInTime: { gte: startDate, lte: endDate } },
         select: { studentId: true },
         distinct: ['studentId'],
+        take: 10000,
       }),
       // Daily breakdown — transactions grouped by date
       prisma.transaction.findMany({
         where: { createdAt: { gte: startDate, lte: endDate } },
         select: { createdAt: true, amountPaid: true },
+        take: 10000,
       }),
       // Daily check-ins
       prisma.log.findMany({
         where: { checkInTime: { gte: startDate, lte: endDate } },
         select: { date: true },
+        take: 10000,
       }),
       // Staff shifts this month
       prisma.staffShift.findMany({
-        where: { date: { gte: startDate.toISOString().slice(0, 10), lte: endDate.toISOString().slice(0, 10) } },
+        where: { date: { gte: toLocalDateString(startDate), lte: toLocalDateString(endDate) } },
+        take: 1000,
       }),
     ])
 
@@ -108,7 +117,7 @@ export async function GET(req: NextRequest) {
 
     const dailyRevenue: Record<string, number> = {}
     for (const t of transactions) {
-      const d = t.createdAt.toISOString().slice(0, 10)
+      const d = toLocalDateString(t.createdAt)
       dailyRevenue[d] = (dailyRevenue[d] || 0) + t.amountPaid
     }
 

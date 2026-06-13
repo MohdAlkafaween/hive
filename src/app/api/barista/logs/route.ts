@@ -2,12 +2,17 @@ import { NextRequest } from 'next/server'
 import prisma from '@/lib/prisma'
 import { requireAuth } from '@/lib/authGuard'
 import { isValidDateString } from '@/lib/sanitize'
+import { checkStaffRateLimit } from '@/lib/rateLimit'
+import { toLocalDateString } from '@/lib/subscriptionLogic'
 
 // GET — barista order logs, optionally filtered by date
 export async function GET(req: NextRequest) {
   try {
-    const session = await requireAuth('ADMIN', 'STAFF')
+    const session = await requireAuth('ADMIN', 'MANAGER', 'STAFF', 'BARISTA')
     if (session instanceof Response) return session
+
+    const rl = checkStaffRateLimit(session.userId as number, 'read')
+    if (rl.limited) return Response.json({ error: 'Rate limit exceeded' }, { status: 429 })
 
     const date = req.nextUrl.searchParams.get('date')
 
@@ -54,7 +59,7 @@ export async function GET(req: NextRequest) {
     // Group by date string in JS (groupBy on DateTime gives per-second, we need per-day)
     const dateMap = new Map<string, { count: number; revenue: number }>()
     for (const entry of ordersByDate) {
-      const d = entry.createdAt.toISOString().slice(0, 10)
+      const d = toLocalDateString(entry.createdAt)
       const existing = dateMap.get(d) || { count: 0, revenue: 0 }
       existing.count += entry._count.id
       existing.revenue += entry._sum.totalPrice || 0

@@ -1,7 +1,7 @@
 export type PlanType = 'Daily' | 'Weekly' | 'Monthly'
 
 export const PLAN_DEFAULTS: Record<PlanType, { price: number; totalVisitsAllowed: number; durationDays: number }> = {
-  Daily:   { price: 3,  totalVisitsAllowed: 999, durationDays: 1  },
+  Daily:   { price: 3,  totalVisitsAllowed: -1,  durationDays: 1  },
   Weekly:  { price: 15, totalVisitsAllowed: 7,   durationDays: 10 },
   Monthly: { price: 50, totalVisitsAllowed: 30,  durationDays: 40 },
 }
@@ -33,6 +33,11 @@ export function todayString(): string {
   const m = String(now.getMonth() + 1).padStart(2, '0')
   const d = String(now.getDate()).padStart(2, '0')
   return `${y}-${m}-${d}`
+}
+
+export function toLocalDateString(date: Date | string): string {
+  const d = new Date(date)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 export function isSubscriptionActive(sub: {

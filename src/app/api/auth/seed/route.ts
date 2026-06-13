@@ -23,11 +23,10 @@ export async function GET(req: Request) {
       return Response.json({ error: 'Admin already exists. Seed is disabled.' }, { status: 403 })
     }
 
-    // Use environment variables for seed credentials; fall back to defaults only in development
-    const seedEmail = process.env.SEED_ADMIN_EMAIL || 'Hive.study@admin.jordan'
-    const seedPassword = process.env.SEED_ADMIN_PASSWORD || 'uni.study@2000.house'
-    if (process.env.NODE_ENV === 'production' && !process.env.SEED_ADMIN_PASSWORD) {
-      return Response.json({ error: 'SEED_ADMIN_PASSWORD must be set in production' }, { status: 500 })
+    const seedEmail = process.env.SEED_ADMIN_EMAIL
+    const seedPassword = process.env.SEED_ADMIN_PASSWORD
+    if (!seedEmail || !seedPassword) {
+      return Response.json({ error: 'SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD must be set in environment' }, { status: 500 })
     }
 
     const passwordHash = await bcrypt.hash(seedPassword, 12)

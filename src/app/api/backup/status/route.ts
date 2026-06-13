@@ -1,10 +1,14 @@
 import { requireAuth } from '@/lib/authGuard'
 import prisma from '@/lib/prisma'
+import { checkStaffRateLimit } from '@/lib/rateLimit'
 
 export async function GET() {
   try {
     const session = await requireAuth('ADMIN')
     if (session instanceof Response) return session
+
+    const rl = checkStaffRateLimit(session.userId as number, 'read')
+    if (rl.limited) return Response.json({ error: 'Rate limit exceeded' }, { status: 429 })
 
     const logs = await prisma.backupLog.findMany({
       orderBy: { timestamp: 'desc' },

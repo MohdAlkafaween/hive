@@ -16,7 +16,7 @@ export default function AppLayout({
         <TopNav />
         <div className="flex flex-1 overflow-hidden relative z-10">
           <IconSidebar />
-          <main className="flex-1 flex flex-col overflow-auto p-4 md:p-6">
+          <main className="flex-1 flex flex-col overflow-auto p-3 md:p-6 pb-20 md:pb-6">
             <div className="max-w-7xl w-full mx-auto flex-1 flex flex-col">
               <ErrorBoundary>
                 <GlobalProviders>{children}</GlobalProviders>

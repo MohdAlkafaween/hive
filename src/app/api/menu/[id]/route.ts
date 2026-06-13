@@ -2,12 +2,16 @@ import { NextRequest } from 'next/server'
 import prisma from '@/lib/prisma'
 import { requireAuth } from '@/lib/authGuard'
 import { isValidId } from '@/lib/sanitize'
+import { checkStaffRateLimit } from '@/lib/rateLimit'
 
 // GET — single item with options
 export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
     const session = await requireAuth('ADMIN', 'STAFF', 'MANAGER')
     if (session instanceof Response) return session
+
+    const rl = checkStaffRateLimit(session.userId as number, 'read')
+    if (rl.limited) return Response.json({ error: 'Rate limit exceeded' }, { status: 429 })
 
     const { id } = await ctx.params
     if (!isValidId(id)) return Response.json({ error: 'Invalid ID' }, { status: 400 })
@@ -31,6 +35,9 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   try {
     const session = await requireAuth('ADMIN', 'STAFF')
     if (session instanceof Response) return session
+
+    const rl = checkStaffRateLimit(session.userId as number, 'write')
+    if (rl.limited) return Response.json({ error: 'Rate limit exceeded' }, { status: 429 })
 
     const { id } = await ctx.params
     if (!isValidId(id)) return Response.json({ error: 'Invalid menu item ID' }, { status: 400 })
@@ -86,6 +93,9 @@ export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: str
   try {
     const session = await requireAuth('ADMIN', 'STAFF')
     if (session instanceof Response) return session
+
+    const rl = checkStaffRateLimit(session.userId as number, 'write')
+    if (rl.limited) return Response.json({ error: 'Rate limit exceeded' }, { status: 429 })
 
     const { id } = await ctx.params
     if (!isValidId(id)) return Response.json({ error: 'Invalid menu item ID' }, { status: 400 })

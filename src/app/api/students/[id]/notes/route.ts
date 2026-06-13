@@ -2,12 +2,16 @@ import { NextRequest } from 'next/server'
 import prisma from '@/lib/prisma'
 import { requireAuth } from '@/lib/authGuard'
 import { isValidId, sanitizeString } from '@/lib/sanitize'
+import { checkStaffRateLimit } from '@/lib/rateLimit'
 
 // GET notes for a student
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await requireAuth('ADMIN', 'MANAGER', 'STAFF')
     if (session instanceof Response) return session
+
+    const rl = checkStaffRateLimit(session.userId as number, 'read')
+    if (rl.limited) return Response.json({ error: 'Rate limit exceeded' }, { status: 429 })
     const { id } = await params
     if (!isValidId(id)) return Response.json({ error: 'Invalid student ID' }, { status: 400 })
 
@@ -27,6 +31,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   try {
     const session = await requireAuth('ADMIN', 'MANAGER', 'STAFF')
     if (session instanceof Response) return session
+
+    const rl = checkStaffRateLimit(session.userId as number, 'write')
+    if (rl.limited) return Response.json({ error: 'Rate limit exceeded' }, { status: 429 })
     const { id } = await params
     if (!isValidId(id)) return Response.json({ error: 'Invalid student ID' }, { status: 400 })
 
@@ -59,14 +66,17 @@ export async function DELETE(req: NextRequest) {
     const session = await requireAuth('ADMIN')
     if (session instanceof Response) return session
 
+    const rl = checkStaffRateLimit(session.userId as number, 'write')
+    if (rl.limited) return Response.json({ error: 'Rate limit exceeded' }, { status: 429 })
+
     const { searchParams } = new URL(req.url)
     const noteId = searchParams.get('noteId')
     if (!noteId || !isValidId(noteId)) return Response.json({ error: 'Valid noteId required' }, { status: 400 })
 
     await prisma.studentNote.delete({ where: { id: Number(noteId) } })
     return Response.json({ success: true })
-  } catch (e: any) {
-    if (e?.code === 'P2025') return Response.json({ error: 'Note not found' }, { status: 404 })
+  } catch (e) {
+    if (e instanceof Error && 'code' in e && (e as { code: string }).code === 'P2025') return Response.json({ error: 'Note not found' }, { status: 404 })
     console.error('[DELETE /api/students/[id]/notes]', e)
     return Response.json({ error: 'Failed to delete note' }, { status: 500 })
   }

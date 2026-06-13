@@ -21,6 +21,7 @@ export default function LoginPage() {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
         body: JSON.stringify({ email, password })
       })
 
@@ -31,6 +32,10 @@ export default function LoginPage() {
         return
       }
 
+      // router.refresh() clears the Next.js RSC prefetch cache so the next
+      // navigation picks up the newly-set session cookie from middleware.
+      router.refresh()
+      await new Promise(r => setTimeout(r, 100))
       router.push('/')
     } catch {
       setError('An error occurred. Please try again.')
@@ -50,7 +55,7 @@ export default function LoginPage() {
         initial={{ opacity: 0, y: 24, scale: 0.97 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-        className="relative w-full max-w-md rounded-2xl p-8 z-10"
+        className="relative w-full max-w-md rounded-2xl p-6 md:p-8 mx-4 md:mx-0 z-10"
         style={{
           background: 'rgba(255,255,255,0.04)',
           backdropFilter: 'blur(24px)',
@@ -161,6 +166,17 @@ export default function LoginPage() {
           transition={{ delay: 0.6 }}
         >
           Contact your administrator to create an account
+        </motion.p>
+        <motion.p
+          className="mt-2 text-center text-xs text-white/30"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.7 }}
+        >
+          Customer?{' '}
+          <a href="/customer-login" className="text-[#F5C518]/70 hover:text-[#F5C518] transition-colors font-medium">
+            Login here &rarr;
+          </a>
         </motion.p>
       </motion.div>
     </div>

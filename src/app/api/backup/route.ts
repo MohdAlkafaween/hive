@@ -4,13 +4,18 @@ import { readFile, copyFile, mkdir } from 'fs/promises'
 import { join } from 'path'
 import { existsSync } from 'fs'
 import prisma from '@/lib/prisma'
-import { getClientIp } from '@/lib/rateLimit'
+import { checkRateLimit, getClientIp } from '@/lib/rateLimit'
 
-// GET — download database backup (ADMIN only)
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
     const session = await requireAuth('ADMIN')
     if (session instanceof Response) return session
+
+    const ip = getClientIp(req)
+    const limit = checkRateLimit(`backup:${ip}`, 5, 60 * 60 * 1000)
+    if (limit.limited) {
+      return Response.json({ error: 'Too many backup requests' }, { status: 429 })
+    }
 
     const dbPath = join(process.cwd(), 'dev.db')
     if (!existsSync(dbPath)) {
