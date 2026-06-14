@@ -1692,7 +1692,13 @@ function BackupSection() {
     try {
       const formData = new FormData()
       formData.append('file', file)
-      const res = await fetch('/api/backup', { method: 'POST', body: formData })
+      // The server requires this header as a safety gate (see src/app/api/backup/route.ts).
+      // The user already confirmed via the window.confirm above.
+      const res = await fetch('/api/backup', {
+        method: 'POST',
+        headers: { 'X-Confirm-Restore': 'true' },
+        body: formData,
+      })
       if (res.ok) {
         setStatus({ type: 'success', message: 'Database restored successfully! Please refresh the page.' })
       } else {
