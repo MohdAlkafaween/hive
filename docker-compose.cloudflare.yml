@@ -1,24 +1,22 @@
-# HIVE — Cloudflare Tunnel deployment override
+# HIVE — Cloudflare Tunnel deployment override (locally-managed mode)
 #
 # Use this when fronting HIVE with a Cloudflare Tunnel (e.g. a local VM that
 # has no public IP). Cloudflare's edge terminates HTTPS; cloudflared makes an
 # outbound tunnel to Cloudflare and forwards traffic to the hive container
 # over the internal Docker network — no inbound ports needed on the VM.
 #
-# Prerequisites:
-#   1. Your domain is on Cloudflare DNS (free plan is fine).
-#   2. Create a Tunnel in the Cloudflare Zero Trust dashboard
-#      (Networks → Tunnels → Create a tunnel) and copy the token.
-#   3. In the tunnel's Public Hostnames, route your domain to:
-#        Service:  HTTP
-#        URL:      hive:3000
-#   4. Put the token in .env as TUNNEL_TOKEN=<value>
+# Setup is fully CLI-driven (no dashboard clicks):
+#   1. Install cloudflared on the VM and authenticate (one browser visit, like
+#      Tailscale).
+#   2. Create the tunnel:                   cloudflared tunnel create hive-prod
+#   3. Add the DNS record:                  cloudflared tunnel route dns hive-prod <domain>
+#   4. Place the credentials and config in ./cloudflared/ (mounted into the
+#      container at /etc/cloudflared/).
+#
+# Full step-by-step in deploy/CLOUDFLARE_TUNNEL_SETUP.md
 #
 # Run with:
 #   docker compose -f docker-compose.yml -f docker-compose.cloudflare.yml up -d
-#
-# This override disables nginx + certbot (Cloudflare replaces both) and adds
-# the cloudflared sidecar.
 
 services:
   # Cloudflare handles SSL at the edge — local nginx is unnecessary
@@ -35,8 +33,9 @@ services:
     image: cloudflare/cloudflared:latest
     container_name: hive-cloudflared
     restart: unless-stopped
-    command: tunnel --no-autoupdate run --token ${TUNNEL_TOKEN}
+    command: tunnel --no-autoupdate --config /etc/cloudflared/config.yml run
+    volumes:
+      - ./cloudflared:/etc/cloudflared:ro
     depends_on:
       hive:
         condition: service_healthy
-    # No volumes, no published ports — tunnel is outbound-only
