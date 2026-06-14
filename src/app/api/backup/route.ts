@@ -99,10 +99,37 @@ export async function POST(req: NextRequest) {
     })
 
     // Write validated file as new DB
-    const { writeFile: wf } = await import('fs/promises')
+    const { writeFile: wf, unlink } = await import('fs/promises')
+
+    // Critical: SQLite WAL mode keeps -wal and -shm sidecar files. If we
+    // overwrite the main DB but leave them in place, SQLite consults the
+    // stale WAL on next open and reads pre-restore data on top of the new
+    // file. Remove them so SQLite re-initializes against the restored DB.
+    for (const ext of ['-wal', '-shm']) {
+      if (existsSync(dbPath + ext)) {
+        await unlink(dbPath + ext).catch(() => {})
+      }
+    }
+
     await wf(dbPath, bytes)
 
-    return Response.json({ success: true, message: 'Database restored. Restart the server to apply changes.' })
+    // The currently-running Prisma client holds an open connection to the
+    // old DB and won't see the swap. In production (Docker with
+    // restart: unless-stopped), exit the process so the orchestrator
+    // restarts the container against the restored file. In dev, the user
+    // restarts the dev server manually.
+    if (process.env.NODE_ENV === 'production') {
+      setTimeout(() => process.exit(0), 500)
+      return Response.json({
+        success: true,
+        message: 'Database restored. The server is restarting — refresh in ~15 seconds.',
+      })
+    }
+
+    return Response.json({
+      success: true,
+      message: 'Database restored. Restart the server to apply changes.',
+    })
   } catch (e) {
     console.error('[POST /api/backup]', e)
     return Response.json({ error: 'Restore failed' }, { status: 500 })
