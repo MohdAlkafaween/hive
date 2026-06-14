@@ -1691,7 +1691,8 @@ function BackupSection() {
     setStatus(null)
     try {
       const formData = new FormData()
-      formData.append('file', file)
+      // Field name must be 'database' — that's what POST /api/backup reads.
+      formData.append('database', file)
       // The server requires this header as a safety gate (see src/app/api/backup/route.ts).
       // The user already confirmed via the window.confirm above.
       const res = await fetch('/api/backup', {
