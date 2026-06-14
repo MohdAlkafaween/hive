@@ -60,7 +60,3 @@ next-env.d.ts
 
 # Receipt writer test output
 /receipts-test/
-
-# Cloudflare Tunnel credentials — must never be committed
-/cloudflared/*.json
-!/cloudflared/config.yml
